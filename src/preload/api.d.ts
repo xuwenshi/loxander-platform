@@ -1,5 +1,12 @@
 /** preload 通过 contextBridge 暴露的白名单 API 类型（renderer 与 preload 共用） */
 
+/** UI 主题模式：同时决定布局形态与配色（renderer 写到 <html data-mode>） */
+export type ThemeMode = 'soft' | 'dashboard' | 'writing' | 'developer'
+/** 明暗外观：与主题模式正交（renderer 写到 <html data-scheme>） */
+export type ColorScheme = 'light' | 'dark'
+/** 编辑器布局偏好（P2 编辑模式使用） */
+export type EditorLayout = 'split' | 'editor' | 'preview'
+
 export interface Settings {
   workspaceRoot: string
   proxy: string
@@ -11,6 +18,11 @@ export interface Settings {
   vercelToken: string
   vercelProjectId: string
   productionUrl: string
+  /** ---- UI 偏好：存 <userData>/settings.json，与凭据同处，不随仓库分发 ---- */
+  themeMode: ThemeMode
+  colorScheme: ColorScheme
+  sidebarCollapsed: boolean
+  editorLayout: EditorLayout
 }
 
 export type CmsResult<T> =

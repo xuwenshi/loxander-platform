@@ -1,17 +1,190 @@
-:root {
-  color-scheme: dark;
-  --bg: #0f1116;
-  --panel: #161a22;
-  --border: #262c38;
-  --text: #e6e9ef;
-  --muted: #9aa3b2;
-  --accent: #5b8cff;
-  --warn: #f0a020;
+/* Tailwind 只提供布局层工具类；颜色与主题一律走下面的 CSS 变量，不写死颜色 */
+@import "tailwindcss";
+
+/* ============ 主题 token 层：两条正交的轴 ============
+ * 1) 明暗轴   <html data-scheme="light|dark">  —— 决定中性色板 + 状态色 + 圆角/阴影基准
+ * 2) 模式轴   <html data-mode="soft|dashboard|writing|developer"> —— 决定强调色（主题色）
+ *
+ * 两个属性同时挂在 <html> 上，选择器按「明暗 × 模式」组合取值：
+ *   - 明暗块只声明中性/状态色（--bg/--panel/--text/--border/--warn/...）
+ *   - 模式块只声明强调色（--accent/--accent-soft/...）与个别圆角差异
+ * 因此任何「模式未覆写」的 token 都自动回落到当前明暗轴的基础值，
+ * 加模式或加明暗都只需各写一小块，不必做 4×2 的全排列。
+ */
+/* ---------- 明暗基础色板 · 浅色 ---------- */
+:root,
+html[data-scheme='light'] {
+  color-scheme: light;
+
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --card-hover: #eef1f6;
+  --surface-sunken: #edeff4;
+  --surface-raised: #ffffff;
+  --border: #e3e7ee;
+  --border-strong: #c3cad8;
+  --text: #1b1f27;
+  --muted: #667085;
+
+  --input-bg: #ffffff;
+  --btn-bg: #f1f3f8;
+  --btn-danger-bg: #d64545;
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
+
+  --warn: #b26a00;
+  --warn-bg: #fff6e5;
+  --warn-fg: #8a5200;
+  --warn-border: #f0d7a4;
+  --ok: #1f8a4c;
+  --ok-bg: #e9f7ef;
+  --ok-fg: #15693a;
+  --ok-border: #b7e2c8;
+  --err: #d43f3f;
+  --err-bg: #fdeeee;
+  --err-fg: #b02828;
+  --err-border: #f2c2c2;
+  --insert-bg: #e6f5ea;
+  --delete-bg: #fdeaea;
+
+  --mask: rgba(20, 24, 32, 0.38);
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.07);
+  --shadow-strong: 0 18px 44px rgba(16, 24, 40, 0.18);
+
+  /* 四个模式的主题色（供选择器色点预览用：不随「当前模式」变化，任何时候都能看到四色） */
+  --mode-soft-accent: #2f6bed;
+  --mode-dashboard-accent: #16857a;
+  --mode-writing-accent: #b06a2c;
+  --mode-developer-accent: #4f56e0;
+
+  /* 内容分区色（侧栏计数、控制台卡片左侧色条） */
+  --sec-blog: #2f6bed;
+  --sec-diary: #b8781f;
+  --sec-projects: #16857a;
+  --sec-goals: #7c4fd6;
 }
 
-* {
-  box-sizing: border-box;
+/* ---------- 明暗基础色板 · 深色 ---------- */
+html[data-scheme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0f1116;
+  --panel: #161a22;
+  --card: #161a22;
+  --card-hover: #1a1f29;
+  --surface-sunken: #12161d;
+  --surface-raised: #161c26;
+  --border: #262c38;
+  --border-strong: #3a465c;
+  --text: #e6e9ef;
+  --muted: #9aa3b2;
+
+  --input-bg: #10141a;
+  --btn-bg: #1b212b;
+  --btn-danger-bg: #7a2b2b;
+  --on-accent: #ffffff;
+  --on-danger: #ffffff;
+
+  --warn: #f0a020;
+  --warn-bg: #2a2113;
+  --warn-fg: #f0c070;
+  --warn-border: #4a3a18;
+  --ok: #4ec97a;
+  --ok-bg: #14251a;
+  --ok-fg: #7ddc9a;
+  --ok-border: #234833;
+  --err: #ff6b6b;
+  --err-bg: #2a1414;
+  --err-fg: #ff8b8b;
+  --err-border: #4a2020;
+  --insert-bg: #12281a;
+  --delete-bg: #2a1616;
+
+  --mask: rgba(6, 8, 12, 0.62);
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-strong: 0 18px 44px rgba(0, 0, 0, 0.5);
+
+  --mode-soft-accent: #5b8cff;
+  --mode-dashboard-accent: #4f9d8b;
+  --mode-writing-accent: #c98f5a;
+  --mode-developer-accent: #6f7cff;
+
+  --sec-blog: #5b8cff;
+  --sec-diary: #e0a458;
+  --sec-projects: #4f9d8b;
+  --sec-goals: #b98cff;
 }
+
+/* ---------- 模式强调色 · 柔和编辑（蓝） ---------- */
+html[data-mode='soft'] {
+  --accent: var(--mode-soft-accent);
+  --accent-strong: #2f5bd0;
+  --accent-soft: #1e2634;
+  --accent-border: #2c3a55;
+}
+html[data-scheme='light'][data-mode='soft'] {
+  --accent-strong: #1d4fc4;
+  --accent-soft: #e8eeff;
+  --accent-border: #c2d3fb;
+}
+
+/* ---------- 模式强调色 · 管理控制台（青绿，数据可读性优先） ---------- */
+html[data-mode='dashboard'] {
+  --accent: var(--mode-dashboard-accent);
+  --accent-strong: #3d7d6e;
+  --accent-soft: #17262a;
+  --accent-border: #24413c;
+  --radius: 8px;
+}
+html[data-scheme='light'][data-mode='dashboard'] {
+  --accent-strong: #0f6b62;
+  --accent-soft: #e2f4f0;
+  --accent-border: #b3e0d8;
+}
+
+/* ---------- 模式强调色 · 专注写作（暖琥珀，长时间阅读不刺眼） ---------- */
+html[data-mode='writing'] {
+  --accent: var(--mode-writing-accent);
+  --accent-strong: #a97245;
+  --accent-soft: #2a231b;
+  --accent-border: #4a3b2b;
+  --radius: 12px;
+}
+html[data-scheme='light'][data-mode='writing'] {
+  --accent-strong: #8f5420;
+  --accent-soft: #fdf1e3;
+  --accent-border: #f0d6b5;
+}
+
+/* ---------- 模式强调色 · 开发者（靛紫，高对比便于读 diff） ---------- */
+html[data-mode='developer'] {
+  --accent: var(--mode-developer-accent);
+  --accent-strong: #5a66d9;
+  --accent-soft: #1a1e35;
+  --accent-border: #2f3654;
+  --radius: 6px;
+  --shadow: none;
+}
+html[data-scheme='light'][data-mode='developer'] {
+  --accent-strong: #3a41b8;
+  --accent-soft: #eceeff;
+  --accent-border: #c8cbf7;
+}
+
+/* ============ 组件样式层 ============
+ * 全部遗留组件样式显式放进 @layer components。
+ * 原因：未分层（unlayered）的规则会**无条件**压过 @layer utilities 里的 Tailwind 工具类
+ * （例如 `button { padding: 5px 10px }` 会让按钮上的 px-1.5 / text-[10px] / bg-* 全部失效），
+ * 放进 components 层后，utilities 才按预期覆写，组件默认样式仍对未指定工具类的元素生效。
+ * 主题 token 层保持未分层，确保 token 永远不被工具类改写。
+ */
+@layer components {
+  * {
+    box-sizing: border-box;
+  }
 
 html,
 body,
@@ -24,54 +197,6 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-}
-
-.layout {
-  display: grid;
-  grid-template-columns: 200px 264px 1fr;
-  height: 100%;
-  overflow: hidden;
-}
-
-.sidebar {
-  border-right: 1px solid var(--border);
-  padding: 16px 12px;
-  background: var(--panel);
-}
-
-.sidebar h1 {
-  font-size: 13px;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-  margin: 0 0 12px;
-  text-transform: uppercase;
-}
-
-.tree-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 6px;
-  color: var(--text);
-}
-
-.tree-item.active {
-  background: #1e2634;
-  color: var(--accent);
-}
-
-.tree-item .count {
-  color: var(--muted);
-}
-
-.main {
-  padding: 20px 24px;
-  overflow: auto;
-}
-
-.main h2 {
-  margin: 0 0 4px;
-  font-size: 16px;
 }
 
 .diagnostics {
@@ -87,11 +212,11 @@ body {
 }
 
 .diagnostics .ok {
-  color: #4ec97a;
+  color: var(--ok);
 }
 
 .diagnostics .err {
-  color: #ff6b6b;
+  color: var(--err);
 }
 
 table {
@@ -123,29 +248,16 @@ th {
 
 .badge.draft {
   color: var(--warn);
-  border-color: #4a3a18;
+  border-color: var(--warn-border);
 }
 
-/* ---------- P1：三栏 + 编辑区 ---------- */
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-foot {
-  margin-top: auto;
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* ---------- P1：主壳由 App 的 Tailwind 网格承担，这里只剩两栏内容样式 ---------- */
 
 .entries {
   border-right: 1px solid var(--border);
   padding: 14px 12px;
   overflow: auto;
-  background: #12161d;
+  background: var(--surface-sunken);
 }
 
 .entries h2 {
@@ -170,12 +282,12 @@ th {
 }
 
 .entry:hover {
-  background: #1a1f29;
+  background: var(--card-hover);
 }
 
 .entry.active {
-  background: #1e2634;
-  border-color: #2c3a55;
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 .entry-title {
@@ -203,6 +315,12 @@ th {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+}
+
+/* 编辑区在四个模式间常驻挂载，非编辑模式靠 HTML hidden 属性隐藏。
+ * 这条规则必须非分层，才能压过上面同级的 .editor-pane{display:flex}。 */
+.editor-pane[hidden] {
+  display: none;
 }
 
 .doc-head {
@@ -253,13 +371,13 @@ button {
   padding: 5px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #1b212b;
+  background: var(--btn-bg);
   color: var(--text);
   cursor: pointer;
 }
 
 button:hover:not(:disabled) {
-  border-color: #3a465c;
+  border-color: var(--border-strong);
 }
 
 button:disabled {
@@ -268,13 +386,16 @@ button:disabled {
 }
 
 button.primary {
-  background: #2f5bd0;
-  border-color: #2f5bd0;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  /* 强调底色在明暗两套里都是深色，文字固定白色才够对比 */
+  color: var(--on-accent);
 }
 
 button.danger {
-  background: #7a2b2b;
-  border-color: #7a2b2b;
+  background: var(--btn-danger-bg);
+  border-color: var(--btn-danger-bg);
+  color: var(--on-danger);
 }
 
 button.ghost.block {
@@ -291,13 +412,13 @@ button.ghost.block {
 }
 
 .banner.conflict {
-  background: #2a2113;
-  color: #f0c070;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 
 .banner.err {
-  background: #2a1414;
-  color: #ff8b8b;
+  background: var(--err-bg);
+  color: var(--err-fg);
 }
 
 .banner-actions {
@@ -344,8 +465,53 @@ button.ghost.block {
 }
 
 .tab.active {
-  background: #1e2634;
+  background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* 布局三项与「差异预览」之间的弹性空隙，把后者推到右侧 */
+.tabs-gap {
+  flex: 1;
+}
+
+/* ---------- 编辑区布局：编辑 / 分栏 / 预览（由 settings.editorLayout 驱动） ---------- */
+.write-area {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.write-area[data-layout='split'] {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* 编辑器外层：让里面的 .editor{flex:1} 有高度可用 */
+.write-area .editor-slot {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+
+.write-area .preview {
+  min-width: 0;
+  min-height: 0;
+}
+
+.write-area[data-layout='split'] .preview {
+  border-left: 1px solid var(--border);
+}
+
+/* 隐藏一律走 hidden 属性而不是卸载组件：编辑器必须常驻，否则 CodeMirror
+ * 会丢撤销栈与光标。这里必须显式声明 display:none —— 组件层的 display
+ * 会压过 UA 样式表里的 [hidden]{display:none}。 */
+.write-area[hidden],
+.write-area .editor-slot[hidden],
+.write-area .preview[hidden] {
+  display: none;
 }
 
 .editor {
@@ -388,11 +554,11 @@ button.ghost.block {
 }
 
 .diff-line.insert {
-  background: #12281a;
+  background: var(--insert-bg);
 }
 
 .diff-line.delete {
-  background: #2a1616;
+  background: var(--delete-bg);
 }
 
 .diff-no {
@@ -457,7 +623,7 @@ button.ghost.block {
   padding: 5px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #10141a;
+  background: var(--input-bg);
   color: var(--text);
   font: inherit;
 }
@@ -485,13 +651,13 @@ button.ghost.block {
 }
 
 .fm-issue.err {
-  background: #2a1414;
-  color: #ff8b8b;
+  background: var(--err-bg);
+  color: var(--err-fg);
 }
 
 .fm-issue.warn {
-  background: #2a2113;
-  color: #f0c070;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
 }
 
 .milestones {
@@ -521,6 +687,13 @@ button.ghost.block {
   color: var(--muted);
 }
 
+.empty h2 {
+  /* Tailwind preflight 会把标题字号重置为继承值，这里显式补回 */
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .hint {
   color: var(--muted);
   font-size: 12px;
@@ -531,17 +704,17 @@ button.ghost.block {
 }
 
 .err {
-  color: #ff8b8b;
+  color: var(--err-fg);
 }
 
 .badge.err-badge {
-  color: #ff8b8b;
-  border-color: #4a2020;
+  color: var(--err-fg);
+  border-color: var(--err-border);
 }
 
 .badge.warn-badge {
   color: var(--warn);
-  border-color: #4a3a18;
+  border-color: var(--warn-border);
 }
 
 .issues {
@@ -566,6 +739,19 @@ button.ghost.block {
 .markdown-body h3 {
   margin: 1.2em 0 0.5em;
   line-height: 1.3;
+  font-weight: 600;
+}
+
+.markdown-body h1 {
+  font-size: 1.6em;
+}
+
+.markdown-body h2 {
+  font-size: 1.3em;
+}
+
+.markdown-body h3 {
+  font-size: 1.1em;
 }
 
 .markdown-body p,
@@ -574,7 +760,7 @@ button.ghost.block {
 }
 
 .markdown-body pre {
-  background: #10141a;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -602,11 +788,7 @@ button.ghost.block {
   max-width: 100%;
 }
 
-/* ---------- P2：发布闸门 ---------- */
-
-.layout.publish-mode {
-  grid-template-columns: 200px 1fr;
-}
+/* ---------- P2：发布闸门（列模板由 App 的 Tailwind 网格决定） ---------- */
 
 .publish-pane {
   display: flex;
@@ -651,17 +833,17 @@ button.ghost.block {
 }
 
 .preflight-head.ok {
-  background: #14251a;
-  color: #7ddc9a;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 
 .preflight-head.err {
-  background: #2a1414;
-  color: #ff8b8b;
+  background: var(--err-bg);
+  color: var(--err-fg);
 }
 
 .fm-issue.info {
-  background: #161c26;
+  background: var(--surface-raised);
   color: var(--muted);
 }
 
@@ -697,7 +879,7 @@ button.ghost.block {
 }
 
 .file-item:hover {
-  background: #1b2029;
+  background: var(--card-hover);
 }
 
 .file-item .mono {
@@ -738,8 +920,8 @@ button.ghost.block {
 }
 
 .banner.ok {
-  background: #14251a;
-  color: #7ddc9a;
+  background: var(--ok-bg);
+  color: var(--ok-fg);
 }
 
 .banner .mono {
@@ -748,8 +930,8 @@ button.ghost.block {
 }
 
 .badge.ok-badge {
-  color: #7ddc9a;
-  border-color: #234833;
+  color: var(--ok-fg);
+  border-color: var(--ok-border);
 }
 
 .mono {
@@ -771,8 +953,8 @@ button.ghost.block {
 }
 
 button.danger-ghost:hover:not(:disabled) {
-  border-color: #7a2b2b;
-  color: #ff8b8b;
+  border-color: var(--btn-danger-bg);
+  color: var(--err-fg);
 }
 
 /* ---------- P4：部署回读 ---------- */
@@ -813,7 +995,7 @@ button.danger-ghost:hover:not(:disabled) {
   padding: 5px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #10141a;
+  background: var(--input-bg);
   color: var(--text);
   font: inherit;
 }
@@ -825,7 +1007,7 @@ button.danger-ghost:hover:not(:disabled) {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-  background: #12161d;
+  background: var(--surface-sunken);
 }
 
 .deploy-status-row {
@@ -850,7 +1032,7 @@ button.danger-ghost:hover:not(:disabled) {
 .dialog-mask {
   position: fixed;
   inset: 0;
-  background: rgba(6, 8, 12, 0.62);
+  background: var(--mask);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -867,7 +1049,7 @@ button.danger-ghost:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-strong);
 }
 
 .dialog h3 {
@@ -891,7 +1073,7 @@ button.danger-ghost:hover:not(:disabled) {
   padding: 7px 9px;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: #10141a;
+  background: var(--input-bg);
   color: var(--text);
   font: inherit;
 }
@@ -915,3 +1097,4 @@ button.danger-ghost:hover:not(:disabled) {
   line-height: 1.5;
   word-break: break-all;
 }
+} /* @layer components 结束 */

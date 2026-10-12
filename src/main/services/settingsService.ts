@@ -8,6 +8,17 @@ import { CmsError } from '../errors'
  * 注意：工作区 = 博客仓库根（含 content/ 的目录），CMS 从不写入自身目录以外的仓库代码。
  */
 
+/** UI 主题模式：同时决定布局形态与配色（见 renderer 的 styles.css token 层） */
+export type ThemeMode = 'soft' | 'dashboard' | 'writing' | 'developer'
+/** 明暗外观：与主题模式正交，写到 <html data-scheme> */
+export type ColorScheme = 'light' | 'dark'
+/** 编辑器布局偏好（P2 编辑模式使用） */
+export type EditorLayout = 'split' | 'editor' | 'preview'
+
+export const THEME_MODES: readonly ThemeMode[] = ['soft', 'dashboard', 'writing', 'developer']
+export const COLOR_SCHEMES: readonly ColorScheme[] = ['light', 'dark']
+export const EDITOR_LAYOUTS: readonly EditorLayout[] = ['split', 'editor', 'preview']
+
 export interface Settings {
   /** 博客仓库根目录（绝对路径） */
   workspaceRoot: string
@@ -27,6 +38,12 @@ export interface Settings {
   vercelProjectId: string
   /** 生产地址，用于「API 说 ready」后的 HTTP 复核（可留空跳过） */
   productionUrl: string
+
+  /** ---- UI 偏好：与凭据同存 userData，不随仓库分发 ---- */
+  themeMode: ThemeMode
+  colorScheme: ColorScheme
+  sidebarCollapsed: boolean
+  editorLayout: EditorLayout
 }
 
 const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
@@ -38,7 +55,11 @@ const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
   repository: '',
   vercelToken: '',
   vercelProjectId: '',
-  productionUrl: ''
+  productionUrl: '',
+  themeMode: 'soft',
+  colorScheme: 'dark',
+  sidebarCollapsed: false,
+  editorLayout: 'split'
 }
 
 function settingsFile(): string {
@@ -89,6 +110,10 @@ interface StoredSettings {
   vercelToken?: string
   vercelProjectId?: string
   productionUrl?: string
+  themeMode?: string
+  colorScheme?: string
+  sidebarCollapsed?: boolean
+  editorLayout?: string
 }
 
 function readStored(): StoredSettings {
@@ -117,7 +142,18 @@ export function getSettings(): Settings {
     repository: stored.repository ?? FALLBACK.repository,
     vercelToken: stored.vercelToken ?? FALLBACK.vercelToken,
     vercelProjectId: stored.vercelProjectId ?? FALLBACK.vercelProjectId,
-    productionUrl: stored.productionUrl ?? FALLBACK.productionUrl
+    productionUrl: stored.productionUrl ?? FALLBACK.productionUrl,
+    // 落盘值可能被手工改坏：一律收敛到合法枚举，未知值退回默认，避免 UI 拿到非法 data-mode
+    themeMode: THEME_MODES.includes(stored.themeMode as ThemeMode)
+      ? (stored.themeMode as ThemeMode)
+      : FALLBACK.themeMode,
+    colorScheme: COLOR_SCHEMES.includes(stored.colorScheme as ColorScheme)
+      ? (stored.colorScheme as ColorScheme)
+      : FALLBACK.colorScheme,
+    sidebarCollapsed: stored.sidebarCollapsed === true,
+    editorLayout: EDITOR_LAYOUTS.includes(stored.editorLayout as EditorLayout)
+      ? (stored.editorLayout as EditorLayout)
+      : FALLBACK.editorLayout
   }
 }
 
@@ -137,6 +173,14 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   if (patch.vercelToken !== undefined) next.vercelToken = String(patch.vercelToken).trim()
   if (patch.vercelProjectId !== undefined) next.vercelProjectId = String(patch.vercelProjectId).trim()
   if (patch.productionUrl !== undefined) next.productionUrl = String(patch.productionUrl).trim()
+  if (patch.themeMode !== undefined && THEME_MODES.includes(patch.themeMode)) next.themeMode = patch.themeMode
+  if (patch.colorScheme !== undefined && COLOR_SCHEMES.includes(patch.colorScheme)) {
+    next.colorScheme = patch.colorScheme
+  }
+  if (patch.sidebarCollapsed !== undefined) next.sidebarCollapsed = Boolean(patch.sidebarCollapsed)
+  if (patch.editorLayout !== undefined && EDITOR_LAYOUTS.includes(patch.editorLayout)) {
+    next.editorLayout = patch.editorLayout
+  }
 
   const file = settingsFile()
   mkdirSync(resolve(file, '..'), { recursive: true })

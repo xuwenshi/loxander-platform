@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { parseDocument, normalizeValue } from '../frontmatterService'
 import { planPatch } from '../contentPatchService'
-import { schemaOf } from '../schemaService'
+import { CONTENT_SECTIONS, schemaOf } from '../schemaService'
 import { listContentFiles } from './fixtures'
 
 /**
  * P1 门禁之一：**往返幂等**。
- * 对真实 11 篇内容，把「当前值」原样 patch 回去必须得到逐字节相同的文件；
+ * 对全部真实内容，把「当前值」原样 patch 回去必须得到逐字节相同的文件；
  * 这同时证明了「未被编辑的字段不会被重新序列化、不会产生 Git 噪声」。
+ *
+ * 注意：真实内容篇数会随作者增删而变，这里只用「结构不变量」做前置条件，
+ * 不写死篇数，避免新增/删除一篇 Markdown 就让门禁红灯。
  */
 
 describe('roundtrip 幂等（真实内容）', () => {
   const files = listContentFiles()
 
-  it('至少覆盖 11 篇内容', () => {
-    expect(files.length).toBe(11)
+  it('覆盖全部真实内容且包含每个已声明分区', () => {
+    expect(files.length).toBeGreaterThan(0)
+    const covered = new Set(files.map((item) => item.section))
+    for (const section of CONTENT_SECTIONS) {
+      expect(covered.has(section), `缺少分区 ${section}`).toBe(true)
+    }
   })
 
   it('空 patch 不改变任何字节', () => {

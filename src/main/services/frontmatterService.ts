@@ -105,19 +105,35 @@ export function parseDocument(text: string): ParsedDocument {
 }
 
 /**
- * 用新的 YAML 原文装配回完整文件；`body` 省略时沿用原文正文。
- * 无 frontmatter 时：`fmRaw` 为空 → 返回 `body ?? 原文`；非空 → 补出一对新分隔行（用于给裸 Markdown 补 frontmatter）。
+ * 把正文统一成目标换行符：
+ * 先归一为 LF（幂等，避免正文本身已含 \r\n 时写出 \r\r\n），再按目标展开。
+ */
+function withFileEol(body: string, eol: string): string {
+  const lf = body.replace(/\r\n?/g, '\n')
+  return eol === '\r\n' ? lf.replace(/\n/g, '\r\n') : lf
+}
+
+/**
+ * 用新的 YAML 原文 + 正文拼回整篇文档；`body` 省略时沿用原文正文。
+ * 无 frontmatter 时：`fmRaw` 为空 → 返回 `body ?? 原文`；非空 → 补出一对新分隔行
+ * （用于给裸 Markdown 补 frontmatter）。
+ *
+ * 关键不变量：**正文写回时保留原文件的换行符**。
+ * 编辑器的缓冲区一律是 LF（CodeMirror 内部模型会把 CRLF 归一成 LF），
+ * 若原文件是 CRLF 而直接写回缓冲区，整篇换行符会被翻成 LF —— 语义没变，
+ * 但 Git 上表现为全文件 diff，而且 frontmatter 仍是 CRLF，文件变成混合换行符。
  */
 export function assembleDocument(doc: ParsedDocument, frontmatterRaw: string, body?: string): string {
+  const eol = detectEol(doc.fullText)
+  const nextBody = body === undefined ? undefined : withFileEol(body, eol)
   if (!doc.hasFrontmatter) {
-    const nextBody = body ?? doc.fullText
-    if (frontmatterRaw === '') return nextBody
-    const eol = detectEol(doc.fullText)
-    return `${DELIM}${eol}${frontmatterRaw}${DELIM}${eol}${nextBody}`
+    const resolved = nextBody ?? doc.fullText
+    if (frontmatterRaw === '') return resolved
+    return `${DELIM}${eol}${frontmatterRaw}${DELIM}${eol}${resolved}`
   }
   const openLine = doc.lines[0]
   const closeLine = doc.lines[doc.closeIndex]
-  return `${openLine.text}${openLine.eol}${frontmatterRaw}${closeLine.text}${closeLine.eol}${body ?? doc.body}`
+  return `${openLine.text}${openLine.eol}${frontmatterRaw}${closeLine.text}${closeLine.eol}${nextBody ?? doc.body}`
 }
 
 /** 列出 YAML 原文里的顶层 key（按出现顺序） */

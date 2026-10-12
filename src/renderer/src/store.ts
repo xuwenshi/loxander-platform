@@ -1,19 +1,23 @@
 import { create } from 'zustand'
 import type {
+  ColorScheme,
   CoverOption,
   DeployProvider,
   DeployState,
   DeployStatus,
   DirtyDiffResult,
+  EditorLayout,
   EntryDocument,
   GitStatus,
   Issue,
   PreflightReport,
   PublishState,
   SectionSchema,
-  SectionSummary
+  SectionSummary,
+  ThemeMode
 } from '../../preload/api'
 import { buildBaseline, buildPatch } from './formValue'
+import { applyColorScheme, applyThemeMode, metaOf } from './theme'
 
 /** 部署状态 → 中文标签（仅供 UI 展示） */
 export function deployStateLabel(state: DeployState): string {
@@ -66,6 +70,12 @@ interface CmsState {
   /** public/ 下的 .svg 候选（封面下拉） */
   covers: CoverOption[]
 
+  /** ---- UI 偏好（P1）：持久化在 <userData>/settings.json，与凭据同处 ---- */
+  themeMode: ThemeMode
+  colorScheme: ColorScheme
+  sidebarCollapsed: boolean
+  editorLayout: EditorLayout
+
   /** ---- Git 闸门 / 发布（P2） ---- */
   report: PreflightReport | null
   gitStatus: GitStatus | null
@@ -83,6 +93,10 @@ interface CmsState {
 
   bootstrap: () => Promise<void>
   pickWorkspace: () => Promise<void>
+  setThemeMode: (mode: ThemeMode) => Promise<void>
+  setColorScheme: (scheme: ColorScheme) => Promise<void>
+  setEditorLayout: (layout: EditorLayout) => Promise<void>
+  toggleSidebar: () => void
   selectSection: (section: string) => void
   openEntry: (slug: string) => Promise<void>
   closeEntry: () => void
@@ -120,6 +134,15 @@ function errorText(res: { code: string; message: string; hint?: string }): strin
   return `${res.code}：${res.message}${res.hint ? `（${res.hint}）` : ''}`
 }
 
+/**
+ * 编辑器缓冲区统一用 LF（与 CodeMirror 的内部模型一致）。
+ * 磁盘上可能是 CRLF，若不归一：打开文件时编辑器会把 CRLF 归一成 LF，
+ * 与基线一比就凭空变成「有未保存改动」。写回时由主进程按原文件的换行符还原。
+ */
+function toEditorText(text: string): string {
+  return text.replace(/\r\n?/g, '\n')
+}
+
 function emptyState() {
   return {
     doc: null,
@@ -145,6 +168,10 @@ export const useCms = create<CmsState>((set, get) => ({
   status: '正在初始化…',
   busy: false,
   covers: [],
+  themeMode: 'soft',
+  colorScheme: 'dark',
+  sidebarCollapsed: false,
+  editorLayout: 'split',
   report: null,
   gitStatus: null,
   publishState: null,
@@ -180,6 +207,13 @@ export const useCms = create<CmsState>((set, get) => ({
     }
 
     const sections = listRes.data.sections
+    // UI 偏好随初始化一起落地，避免先渲染默认主题再闪一下
+    const themeMode = settingsRes.ok ? settingsRes.data.themeMode : 'soft'
+    const colorScheme = settingsRes.ok ? settingsRes.data.colorScheme : 'dark'
+    if (settingsRes.ok) {
+      applyThemeMode(themeMode)
+      applyColorScheme(colorScheme)
+    }
     set({
       sections,
       schemas: schemaRes.data,
@@ -187,6 +221,10 @@ export const useCms = create<CmsState>((set, get) => ({
       activeSection: get().activeSection || sections[0]?.section || '',
       covers: coverRes.ok ? coverRes.data : [],
       deployProvider: settingsRes.ok ? settingsRes.data.deployProvider : 'github',
+      themeMode,
+      colorScheme,
+      sidebarCollapsed: settingsRes.ok ? settingsRes.data.sidebarCollapsed : false,
+      editorLayout: settingsRes.ok ? settingsRes.data.editorLayout : 'split',
       busy: false,
       status: `已加载 ${sections.reduce((sum, item) => sum + item.count, 0)} 篇内容`
     })
@@ -217,6 +255,77 @@ export const useCms = create<CmsState>((set, get) => ({
     await get().bootstrap()
   },
 
+  /**
+   * 主题切换：先乐观改 <html data-mode>（只换 CSS 变量取值，不重挂载组件），
+   * 再落盘 settings.json；落盘失败则回滚，保证 UI 与磁盘一致。
+   */
+  async setThemeMode(mode) {
+    const previous = get().themeMode
+    if (mode === previous) return
+    set({ themeMode: mode })
+    applyThemeMode(mode)
+
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.settings.set({ themeMode: mode })
+    if (!res.ok) {
+      set({ themeMode: previous, error: errorText(res) })
+      applyThemeMode(previous)
+      return
+    }
+    set({ status: `已切换到「${metaOf(mode).label}」模式` })
+  },
+
+  /** 明暗切换：同样只改 <html data-scheme>，落盘失败即回滚 */
+  async setColorScheme(scheme) {
+    const previous = get().colorScheme
+    if (scheme === previous) return
+    set({ colorScheme: scheme })
+    applyColorScheme(scheme)
+
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.settings.set({ colorScheme: scheme })
+    if (!res.ok) {
+      set({ colorScheme: previous, error: errorText(res) })
+      applyColorScheme(previous)
+      return
+    }
+    set({ status: `已切换到${scheme === 'light' ? '浅色' : '深色'}外观` })
+  },
+
+  /**
+   * 编辑区布局（编辑器 / 分栏 / 预览）：本地即时生效并落盘 settings.json。
+   * 只切 data-layout 与可见性，编辑器组件不卸载，撤销栈与光标不丢。
+   */
+  async setEditorLayout(layout) {
+    const previous = get().editorLayout
+    if (layout === previous) return
+    set({ editorLayout: layout })
+
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.settings.set({ editorLayout: layout })
+    if (!res.ok) {
+      set({ editorLayout: previous, error: errorText(res) })
+      return
+    }
+    set({
+      status:
+        layout === 'editor'
+          ? '编辑区布局：仅编辑器'
+          : layout === 'split'
+            ? '编辑区布局：编辑 + 预览分栏'
+            : '编辑区布局：仅预览'
+    })
+  },
+
+  toggleSidebar() {
+    const next = !get().sidebarCollapsed
+    set({ sidebarCollapsed: next })
+    void window.cms?.settings.set({ sidebarCollapsed: next })
+  },
+
   selectSection(section) {
     if (get().isDirty()) {
       const ok = window.confirm('当前条目有未保存改动，切换分区将丢弃这些改动。继续？')
@@ -240,13 +349,15 @@ export const useCms = create<CmsState>((set, get) => ({
     }
     const schema = get().schemas[section]
     const baseline = schema ? buildBaseline(schema, res.data.data) : {}
+    // 基线正文与缓冲区都用 LF，脏值判定才不被换行符差异污染
+    const bufferBody = toEditorText(res.data.body)
     set({
       activeSlug: slug,
       doc: res.data,
       baseline,
       fields: { ...baseline },
-      body: res.data.body,
-      baselineBody: res.data.body,
+      body: bufferBody,
+      baselineBody: bufferBody,
       preview: null,
       conflict: null,
       error: null,
@@ -342,13 +453,14 @@ export const useCms = create<CmsState>((set, get) => ({
     }
     const schema = get().schemas[activeSection]
     const baseline = schema ? buildBaseline(schema, reloaded.data.data) : {}
+    const bufferBody = toEditorText(reloaded.data.body)
     set({
       busy: false,
       doc: reloaded.data,
       baseline,
       fields: { ...baseline },
-      body: reloaded.data.body,
-      baselineBody: reloaded.data.body,
+      body: bufferBody,
+      baselineBody: bufferBody,
       conflict: null,
       preview: null,
       error: null,

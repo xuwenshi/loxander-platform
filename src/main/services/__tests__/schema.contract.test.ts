@@ -8,7 +8,8 @@ import { CONTENT_ROOT, listContentFiles } from './fixtures'
 
 /**
  * P1 门禁之一：**契约测试全绿**。
- * 用真实内容锁死 schema 漂移：11 篇必须全部通过 CMS 校验，且引用完整性无告警。
+ * 用真实内容锁死 schema 漂移：所有现存内容必须全部通过 CMS 校验，且引用完整性无告警。
+ * 注意：不断言具体篇数——内容随时会增删，这正是 CMS 的用途；只断言结构性不变量。
  */
 
 const files = listContentFiles()
@@ -26,14 +27,21 @@ function validate(item: { section: ContentSection; text: string }) {
 }
 
 describe('frontmatter 契约（真实内容）', () => {
-  it('四分区数量符合预期', () => {
-    const counts = Object.fromEntries(
+  it('四分区均可枚举，且满足 Next 路由的删空约束', () => {
+    const counts: Record<string, number> = Object.fromEntries(
       CONTENT_SECTIONS.map((section) => [section, files.filter((item) => item.section === section).length])
     )
-    expect(counts).toEqual({ blog: 4, diary: 2, projects: 3, goals: 2 })
+    // 不锁定具体篇数：内容随时会增删，这正是 CMS 的用途；这里只锁结构性不变量。
+    expect(Object.keys(counts).sort()).toEqual([...CONTENT_SECTIONS].sort())
+    for (const section of ['blog', 'diary', 'projects'] as const) {
+      // 这三个分区走 generateStaticParams（不接受空数组），必须各有 ≥1 篇
+      expect(counts[section], `${section} 不允许为空`).toBeGreaterThanOrEqual(1)
+    }
+    // goals 无 [slug] 路由，允许为空
+    expect(counts.goals).toBeGreaterThanOrEqual(0)
   })
 
-  it('11 篇全部解析成功且无阻断问题', () => {
+  it('全部真实内容解析成功且无阻断问题', () => {
     for (const item of files) {
       const { doc, result } = validate(item)
       expect(doc.hasFrontmatter, `${item.section}/${item.slug}`).toBe(true)
