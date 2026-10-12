@@ -63,6 +63,9 @@ export default function App() {
 
   useEffect(() => {
     void cms.bootstrap()
+    // 订阅外部改动；卸载时退订，避免热更新重复注册监听
+    const unsubscribe = cms.initWatcher()
+    return unsubscribe
     // 只在首次挂载时初始化
   }, [])
 

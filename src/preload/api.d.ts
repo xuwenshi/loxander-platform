@@ -325,6 +325,16 @@ export interface ReadyPayload {
   contentSummary?: Record<string, number>
 }
 
+/** ---- 外部改动感知：主进程监听 content/ 后推送的事件 ---- */
+export interface ContentChangeEvent {
+  /** 事件所属工作区根：renderer 用它丢弃切换工作区后的过期事件 */
+  workspaceRoot: string
+  /** 变更文件的 workspace 相对路径（POSIX，如 content/blog/demo.md，已去重排序） */
+  paths: string[]
+  /** 触发时间（ISO 字符串） */
+  at: string
+}
+
 export interface CmsApi {
   settings: {
     get(): Promise<CmsResult<Settings>>
@@ -401,6 +411,8 @@ export interface CmsApi {
     ready(
       payload: ReadyPayload
     ): Promise<CmsResult<{ acknowledged: boolean; selfcheck: boolean; appVersion: string }>>
+    /** 订阅 content/ 目录的外部改动；返回退订函数（组件卸载时必须调用，避免监听泄漏） */
+    onContentChanged(cb: (event: ContentChangeEvent) => void): () => void
   }
   versions: RuntimeVersions
 }

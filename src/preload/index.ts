@@ -1,5 +1,12 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { CmsApi, FrontmatterPatch, FileFingerprint, ReadyPayload, Settings } from './api'
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import type {
+  CmsApi,
+  ContentChangeEvent,
+  FrontmatterPatch,
+  FileFingerprint,
+  ReadyPayload,
+  Settings
+} from './api'
 
 /**
  * 安全桥：只做转发，不含业务逻辑。
@@ -76,7 +83,18 @@ const api: CmsApi = {
       ipcRenderer.invoke('deploy:status', payload)
   },
   runtime: {
-    ready: (payload: ReadyPayload) => ipcRenderer.invoke('runtime:ready', payload)
+    ready: (payload: ReadyPayload) => ipcRenderer.invoke('runtime:ready', payload),
+    /**
+     * 订阅 content/ 目录的外部改动。只暴露这一个事件通道，且不透传 IpcRendererEvent
+     * （避免把 sender 等内部对象泄漏给 renderer）；返回退订函数供 React 清理。
+     */
+    onContentChanged: (cb: (event: ContentChangeEvent) => void) => {
+      const listener = (_event: IpcRendererEvent, payload: ContentChangeEvent): void => cb(payload)
+      ipcRenderer.on('content:changed', listener)
+      return () => {
+        ipcRenderer.removeListener('content:changed', listener)
+      }
+    }
   },
   versions: readVersions()
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type {
   ColorScheme,
+  ContentChangeEvent,
   CoverOption,
   DeployProvider,
   DeployState,
@@ -47,6 +48,13 @@ export interface ConflictState {
   diskText: string
 }
 
+/** 外部改动提示态：仅在「当前文件被外部修改且缓冲区有改动」时展示 */
+export interface ExternalChangeState {
+  /** 本次事件涉及的 workspace 相对路径（POSIX） */
+  paths: string[]
+  at: string
+}
+
 interface CmsState {
   bridgeOk: boolean
   workspaceRoot: string
@@ -63,6 +71,8 @@ interface CmsState {
 
   preview: DirtyDiffResult | null
   conflict: ConflictState | null
+  /** 当前打开的文件被外部修改，且缓冲区有改动时置位（提供重新载入 / 保留改动两种动作） */
+  externalChange: ExternalChangeState | null
   workspaceIssues: { blocking: Issue[]; warnings: Issue[] }
   status: string
   error: string | null
@@ -92,6 +102,8 @@ interface CmsState {
   deployProvider: DeployProvider
 
   bootstrap: () => Promise<void>
+  /** 订阅外部改动事件；返回退订函数（组件卸载时调用） */
+  initWatcher: () => () => void
   pickWorkspace: () => Promise<void>
   setThemeMode: (mode: ThemeMode) => Promise<void>
   setColorScheme: (scheme: ColorScheme) => Promise<void>
@@ -108,6 +120,10 @@ interface CmsState {
   save: (force?: boolean) => Promise<void>
   discard: () => void
   reloadFromDisk: () => Promise<void>
+  /** 保留我方的未保存改动，仅收起外部改动横幅（后续保存会在冲突时再裁决） */
+  keepMyChanges: () => void
+  /** 处理主进程推送的外部改动事件（清单刷新 + 当前文件跟随/提示） */
+  handleContentChanged: (event: ContentChangeEvent) => Promise<void>
   validateWorkspace: () => Promise<void>
   refreshList: () => Promise<void>
   createEntry: (slug: string, title?: string) => Promise<void>
@@ -152,8 +168,14 @@ function emptyState() {
     baselineBody: '',
     preview: null,
     conflict: null,
+    externalChange: null,
     error: null
   }
+}
+
+/** 当前条目的 workspace 相对路径（POSIX），用于与 watcher 事件里的路径比对 */
+export function currentEntryPath(section: string, slug: string): string {
+  return `content/${section}/${slug}.md`
 }
 
 export const useCms = create<CmsState>((set, get) => ({
@@ -235,6 +257,75 @@ export const useCms = create<CmsState>((set, get) => ({
       versions: cms.versions,
       location: window.location.href,
       contentSummary: Object.fromEntries(sections.map((item) => [item.section, item.count]))
+    })
+  },
+
+  /**
+   * 订阅 content/ 的外部改动。preload 未暴露该通道时（旧版）安全降级为空订阅。
+   * 返回退订函数，交给 React effect 的 cleanup 调用，避免热更新时重复注册。
+   */
+  initWatcher() {
+    const cms = window.cms
+    if (!cms?.runtime?.onContentChanged) return () => {}
+    return cms.runtime.onContentChanged((event) => {
+      void get().handleContentChanged(event)
+    })
+  },
+
+  /**
+   * 外部改动处理：
+   * 1) 先刷新清单（新增/删除/改名都会反映到侧栏）；
+   * 2) 若变更的正是当前打开的文件——缓冲区干净就静默跟随磁盘，
+   *    有未保存改动则「绝不覆盖」，只置提示态交给用户裁决。
+   */
+  async handleContentChanged(event) {
+    const cms = window.cms
+    if (!cms) return
+    // 工作区切换后可能收到旧根的事件，直接丢弃
+    if (get().workspaceRoot && event.workspaceRoot && event.workspaceRoot !== get().workspaceRoot) return
+
+    await get().refreshList()
+
+    const { activeSection, activeSlug, doc } = get()
+    if (!doc || !activeSlug) return
+    if (!event.paths.includes(currentEntryPath(activeSection, activeSlug))) return
+
+    if (get().isDirty()) {
+      set({
+        externalChange: { paths: event.paths, at: event.at },
+        status: '检测到外部改动：当前文件已被其他程序修改'
+      })
+      return
+    }
+
+    // 缓冲区干净 → 静默重新读入（沿用 LF 归一，避免误判脏值）
+    const res = await cms.content.read(activeSection, activeSlug)
+    if (!res.ok) {
+      // 文件可能被外部删除或改名，此时无法静默跟随
+      set({
+        externalChange: { paths: event.paths, at: event.at },
+        status: '检测到外部改动：当前文件可能已被删除或重命名'
+      })
+      return
+    }
+    // 磁盘内容与本机基线一致（例如刚由本 CMS 保存触发的事件）：无需跟随，也不打扰状态栏
+    if (res.data.fingerprint.sha256 === doc.fingerprint.sha256) {
+      set({ externalChange: null })
+      return
+    }
+    const schema = get().schemas[activeSection]
+    const baseline = schema ? buildBaseline(schema, res.data.data) : {}
+    const bufferBody = toEditorText(res.data.body)
+    set({
+      doc: res.data,
+      baseline,
+      fields: { ...baseline },
+      body: bufferBody,
+      baselineBody: bufferBody,
+      preview: null,
+      externalChange: null,
+      error: null,
+      status: '已自动跟随磁盘上的外部改动'
     })
   },
 
@@ -360,6 +451,7 @@ export const useCms = create<CmsState>((set, get) => ({
       baselineBody: bufferBody,
       preview: null,
       conflict: null,
+      externalChange: null,
       error: null,
       status: `已打开 ${section}/${slug}`
     })
@@ -482,9 +574,20 @@ export const useCms = create<CmsState>((set, get) => ({
   async reloadFromDisk() {
     const { activeSection, activeSlug } = get()
     if (!activeSlug) return
-    set({ conflict: null })
+    set({ conflict: null, externalChange: null })
     await get().openEntry(activeSlug)
     set({ status: `已重新加载磁盘版本（${activeSection}/${activeSlug}）` })
+  },
+
+  /**
+   * 保留我方改动：只收起横幅，不动缓冲区。
+   * 之后保存时乐观锁仍会拦住真实冲突，届时走「确认强制覆盖」流程。
+   */
+  keepMyChanges() {
+    set({
+      externalChange: null,
+      status: '已保留你的改动；保存时若与磁盘冲突，可在冲突提示中选择强制覆盖'
+    })
   },
 
   async validateWorkspace() {

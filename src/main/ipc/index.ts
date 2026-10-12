@@ -1,8 +1,13 @@
-import { app, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CmsError } from '../errors'
 import { listContent } from '../services/contentService'
+import {
+  createContentWatcher,
+  type ContentChangeEvent,
+  type ContentWatcherHandle
+} from '../services/contentWatcherService'
 import {
   createEntry,
   deleteEntry,
@@ -90,6 +95,42 @@ interface PatchPayload {
   force?: boolean
 }
 
+/* ---- 外部改动感知：watcher 跟随当前工作区，退出时释放 ---- */
+
+let contentWatcher: ContentWatcherHandle | null = null
+/** 当前正在监听的工作区根；用于判断是否需要重建 watcher */
+let watchedRoot = ''
+
+/** 把事件广播给所有窗口（renderer 侧再用 workspaceRoot 过滤过期事件） */
+function broadcastContentChange(event: ContentChangeEvent): void {
+  console.log('[cms] content 外部改动：' + event.paths.join(', '))
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('content:changed', event)
+  }
+}
+
+/**
+ * 让 watcher 与当前工作区保持一致：根未变则什么都不做；
+ * 变了先关旧再开新；根被清空则直接关闭。选择工作区与保存设置后都会调用。
+ */
+function syncContentWatcher(): void {
+  const root = getSettings().workspaceRoot
+  if (contentWatcher && watchedRoot === root) return
+  contentWatcher?.close()
+  contentWatcher = null
+  watchedRoot = root
+  if (!root) return
+  contentWatcher = createContentWatcher({ workspaceRoot: root, onChanges: broadcastContentChange })
+  console.log('[cms] 已开始监听 ' + join(root, 'content'))
+}
+
+/** 应用退出时调用：释放 fs.watch 句柄，避免残留监听 */
+export function disposeContentWatcher(): void {
+  contentWatcher?.close()
+  contentWatcher = null
+  watchedRoot = ''
+}
+
 interface SaveBodyPayload {
   section: string
   slug: string
@@ -100,7 +141,12 @@ interface SaveBodyPayload {
 
 export function registerIpcHandlers(): void {
   handle('settings:get', () => getSettings())
-  handle('settings:set', (patch: Partial<Settings>) => updateSettings(patch))
+  handle('settings:set', (patch: Partial<Settings>) => {
+    const next = updateSettings(patch)
+    // 工作区根可能被改动：让 watcher 立即跟随新根
+    if (patch?.workspaceRoot !== undefined) syncContentWatcher()
+    return next
+  })
 
   handle('workspace:pick', async () => {
     const result = await dialog.showOpenDialog({
@@ -112,7 +158,9 @@ export function registerIpcHandlers(): void {
     if (!existsSync(join(picked, 'content'))) {
       throw new CmsError('WORKSPACE_NO_CONTENT', `所选目录下没有 content/：${picked}`, '请选择 my-blog 仓库根目录')
     }
-    return { canceled: false, settings: updateSettings({ workspaceRoot: picked }) }
+    const settings = updateSettings({ workspaceRoot: picked })
+    syncContentWatcher()
+    return { canceled: false, settings }
   })
 
   handle('content:list', (section?: unknown) => listContent(section))
@@ -310,4 +358,7 @@ export function registerIpcHandlers(): void {
     completeSelfcheck({ renderer: payload, sandboxed: true })
     return { acknowledged: true, selfcheck: isSelfcheck(), appVersion: app.getVersion() }
   })
+
+  // 启动即按当前工作区开始监听 content/（未配置工作区时静默跳过）
+  syncContentWatcher()
 }

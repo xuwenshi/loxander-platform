@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, session, shell } from 'electron'
-import { registerIpcHandlers } from './ipc'
+import { registerIpcHandlers, disposeContentWatcher } from './ipc'
 import { listContent } from './services/contentService'
 import { getSettings } from './services/settingsService'
 import { armSelfcheck, failSelfcheck } from './selfcheck'
@@ -142,4 +142,9 @@ void app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// 退出前释放 content/ 监听句柄，避免 fs.watch 残留
+app.on('will-quit', () => {
+  disposeContentWatcher()
 })

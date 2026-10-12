@@ -104,6 +104,26 @@ export default function EditorPane({
             </div>
           ) : null}
 
+          {cms.externalChange ? (
+            <div className="banner conflict">
+              <div>
+                <strong>检测到外部改动</strong>
+                <div className="hint">
+                  当前文件在 CMS 之外被修改（{cms.externalChange.paths.join('、')}）。
+                  {cms.isDirty() ? '你的未保存改动不会被自动覆盖，请选择如何处理。' : '可选择重新载入以同步磁盘内容。'}
+                </div>
+              </div>
+              <div className="banner-actions">
+                <button type="button" className="ghost" onClick={() => void cms.reloadFromDisk()}>
+                  重新载入（丢弃我的改动）
+                </button>
+                <button type="button" className="ghost" onClick={cms.keepMyChanges}>
+                  保留我的改动
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {cms.error ? <div className="banner err">{cms.error}</div> : null}
 
           <div className="editor-body" style={showForm ? undefined : { gridTemplateColumns: '1fr' }}>
