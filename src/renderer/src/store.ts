@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type {
+  AutoPublishEvent,
   ColorScheme,
   ContentChangeEvent,
   CoverOption,
@@ -12,6 +13,7 @@ import type {
   GitStatus,
   Issue,
   PreflightReport,
+  PreviewStatus,
   PublishState,
   SectionSchema,
   SectionSummary,
@@ -101,6 +103,18 @@ interface CmsState {
   deploying: boolean
   deployProvider: DeployProvider
 
+  /** ---- 本地实时预览（A）：把真实博客页面内嵌在右侧第 4 列 ---- */
+  previewVisible: boolean
+  previewStatus: PreviewStatus
+  /** 保存 / 内容变更后自增；PreviewPane 监听到即 reloadIgnoringCache() 刷新 */
+  previewReloadToken: number
+  previewLogs: string
+
+  /** ---- 线上自动发布（B） ---- */
+  autoPublish: boolean
+  /** 最近一次自动发布的决策/结果（UI 必须显式展示，绝不静默） */
+  autoPublishLast: AutoPublishEvent | null
+
   bootstrap: () => Promise<void>
   /** 订阅外部改动事件；返回退订函数（组件卸载时调用） */
   initWatcher: () => () => void
@@ -150,6 +164,18 @@ interface CmsState {
   setDeployProvider: (provider: DeployProvider) => void
   runDeployStatus: (wait?: boolean) => Promise<void>
   clearDeployStatus: () => void
+
+  /** 订阅预览状态 / 自动发布 / 部署回读事件；返回退订函数（组件卸载时调用） */
+  initPreview: () => () => void
+  openPreview: () => void
+  closePreview: () => void
+  startPreview: () => Promise<void>
+  stopPreview: () => Promise<void>
+  restartPreview: () => Promise<void>
+  refreshPreviewLogs: () => Promise<void>
+  setAutoPublish: (auto: boolean) => Promise<void>
+  /** 处理主进程推送的自动发布事件（跳过原因 / 实际提交清单） */
+  handleAutoPublishEvent: (event: AutoPublishEvent) => void
 }
 
 function errorText(res: { code: string; message: string; hint?: string }): string {
@@ -184,7 +210,17 @@ export function currentEntryPath(section: string, slug: string): string {
   return `content/${section}/${slug}.md`
 }
 
-export const useCms = create<CmsState>((set, get) => ({
+export const useCms = create<CmsState>((set, get) => {
+  /**
+   * 冲突 / 外部改动期间暂停自动发布：只要任一提示态存在就 hold，
+   * 二者都清掉才恢复 —— 避免我方尚未裁决的改动被自动提交并级联发布。
+   */
+  const syncAutoHold = (): void => {
+    const { conflict, externalChange } = get()
+    void window.cms?.publish.autoHold(Boolean(conflict || externalChange))
+  }
+
+  return {
   bridgeOk: false,
   workspaceRoot: '',
   sections: [],
@@ -210,6 +246,12 @@ export const useCms = create<CmsState>((set, get) => ({
   deployStatus: null,
   deploying: false,
   deployProvider: 'github',
+  previewVisible: false,
+  previewStatus: { state: 'stopped', pid: null, origin: null, port: null, message: null },
+  previewReloadToken: 0,
+  previewLogs: '',
+  autoPublish: true,
+  autoPublishLast: null,
 
   async bootstrap() {
     const cms = window.cms
@@ -253,6 +295,7 @@ export const useCms = create<CmsState>((set, get) => ({
       colorScheme,
       sidebarCollapsed: settingsRes.ok ? settingsRes.data.sidebarCollapsed : false,
       editorLayout: settingsRes.ok ? settingsRes.data.editorLayout : 'split',
+      autoPublish: settingsRes.ok ? settingsRes.data.autoPublish : true,
       busy: false,
       status: `已加载 ${sections.reduce((sum, item) => sum + item.count, 0)} 篇内容`
     })
@@ -279,6 +322,113 @@ export const useCms = create<CmsState>((set, get) => ({
   },
 
   /**
+   * 订阅预览状态 / 自动发布 / 部署回读三类事件，并主动补拉一次当前预览状态。
+   * 与 initWatcher 一样返回退订函数（老版本 preload 缺通道时逐项安全降级）。
+   */
+  initPreview() {
+    const cms = window.cms
+    if (!cms) return () => {}
+    const subs: Array<(() => void) | undefined> = [
+      cms.runtime?.onPreviewEvent?.((status) => set({ previewStatus: status })),
+      cms.runtime?.onPublishChanged?.((state) => set({ publishState: state })),
+      cms.runtime?.onDeployChanged?.((status) => set({ deployStatus: status })),
+      cms.runtime?.onAutoPublishEvent?.((event) => get().handleAutoPublishEvent(event))
+    ]
+    // 面板可能在 dev server 就绪之后才打开：补拉一次，避免显示成「未启动」
+    void cms.preview?.status?.().then((res) => {
+      if (res.ok) set({ previewStatus: res.data })
+    })
+    return () => {
+      for (const off of subs) off?.()
+    }
+  },
+
+  /** 展开预览列；若 dev server 还没起来就按需拉起（已在运行则只展开，不重复启动） */
+  openPreview() {
+    set({ previewVisible: true })
+    const state = get().previewStatus.state
+    if (state === 'stopped' || state === 'error') void get().startPreview()
+  },
+
+  closePreview() {
+    // 只隐藏面板，不停 dev server：再次展开可秒显示（stop 交给显式按钮/退出）
+    set({ previewVisible: false })
+  },
+
+  async startPreview() {
+    const cms = window.cms
+    if (!cms) return
+    set({ previewStatus: { ...get().previewStatus, state: 'starting', message: '正在启动本地预览…' } })
+    const res = await cms.preview.start()
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ previewStatus: res.data, error: null, status: `本地预览已就绪：${res.data.origin ?? ''}` })
+  },
+
+  async stopPreview() {
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.preview.stop()
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ previewStatus: res.data, status: '本地预览已停止' })
+  },
+
+  /** 兜底刷新：重启 dev server（约 6.5s）——用于 reloadIgnoringCache 仍拿到陈旧内容的极少数情形 */
+  async restartPreview() {
+    const cms = window.cms
+    if (!cms) return
+    set({ previewStatus: { ...get().previewStatus, state: 'starting', message: '正在重启本地预览…' } })
+    const res = await cms.preview.restart()
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ previewStatus: res.data, error: null, status: `本地预览已重启：${res.data.origin ?? ''}` })
+  },
+
+  async refreshPreviewLogs() {
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.preview.logs()
+    if (res.ok) set({ previewLogs: res.data })
+  },
+
+  /** 自动发布开关：乐观切换并落盘 settings.json，落盘失败即回滚 */
+  async setAutoPublish(auto) {
+    const cms = window.cms
+    if (!cms) return
+    const previous = get().autoPublish
+    if (auto === previous) return
+    set({ autoPublish: auto })
+    const res = await cms.publish.setAuto(auto)
+    if (!res.ok) {
+      set({ autoPublish: previous, error: errorText(res) })
+      return
+    }
+    set({
+      autoPublish: res.data.autoPublish,
+      status: auto ? '已开启自动发布：内容保存后将自动提交并推送（1–3 分钟上线）' : '已关闭自动发布'
+    })
+  },
+
+  handleAutoPublishEvent(event) {
+    set({ autoPublishLast: event })
+    // 发布成功的状态刷新走主进程另外广播的 publish:changed / publish:deployChanged，这里只补状态栏
+    if (event.kind === 'published') {
+      set({ status: event.commitMessage ? `自动发布：${event.commitMessage}` : '自动发布完成' })
+    } else if (event.kind === 'error') {
+      set({ status: `自动发布失败：${event.reason ?? '未知错误'}` })
+    } else if (event.kind === 'skipped') {
+      set({ status: `自动发布已跳过：${event.reason ?? '条件不满足'}` })
+    }
+  },
+
+  /**
    * 外部改动处理：
    * 1) 先刷新清单（新增/删除/改名都会反映到侧栏）；
    * 2) 若变更的正是当前打开的文件——缓冲区干净就静默跟随磁盘，
@@ -291,6 +441,8 @@ export const useCms = create<CmsState>((set, get) => ({
     if (get().workspaceRoot && event.workspaceRoot && event.workspaceRoot !== get().workspaceRoot) return
 
     await get().refreshList()
+    // 内容有任何变化（CMS 自己保存或其他程序改的）都让预览刷新一次
+    set({ previewReloadToken: get().previewReloadToken + 1 })
 
     const { activeSection, activeSlug, doc } = get()
     if (!doc || !activeSlug) return
@@ -301,6 +453,7 @@ export const useCms = create<CmsState>((set, get) => ({
         externalChange: { paths: event.paths, at: event.at },
         status: '检测到外部改动：当前文件已被其他程序修改'
       })
+      syncAutoHold()
       return
     }
 
@@ -312,11 +465,13 @@ export const useCms = create<CmsState>((set, get) => ({
         externalChange: { paths: event.paths, at: event.at },
         status: '检测到外部改动：当前文件可能已被删除或重命名'
       })
+      syncAutoHold()
       return
     }
     // 磁盘内容与本机基线一致（例如刚由本 CMS 保存触发的事件）：无需跟随，也不打扰状态栏
     if (res.data.fingerprint.sha256 === doc.fingerprint.sha256) {
       set({ externalChange: null })
+      syncAutoHold()
       return
     }
     const schema = get().schemas[activeSection]
@@ -333,6 +488,7 @@ export const useCms = create<CmsState>((set, get) => ({
       error: null,
       status: '已自动跟随磁盘上的外部改动'
     })
+    syncAutoHold()
   },
 
   /** 手动选择博客仓库根目录（打包安装后没有同级 my-blog，必须能手动指定） */
@@ -429,6 +585,7 @@ export const useCms = create<CmsState>((set, get) => ({
       if (!ok) return
     }
     set({ activeSection: section, activeSlug: null, ...emptyState() })
+    syncAutoHold()
   },
 
   async openEntry(slug) {
@@ -461,6 +618,7 @@ export const useCms = create<CmsState>((set, get) => ({
       error: null,
       status: `已打开 ${section}/${slug}`
     })
+    syncAutoHold()
   },
 
   closeEntry() {
@@ -469,6 +627,7 @@ export const useCms = create<CmsState>((set, get) => ({
       if (!ok) return
     }
     set({ activeSlug: null, ...emptyState() })
+    syncAutoHold()
   },
 
   setField(key, value) {
@@ -537,6 +696,8 @@ export const useCms = create<CmsState>((set, get) => ({
           conflict: { message: res.message, hint: res.hint, diskText: detail?.diskText ?? '' },
           error: null
         })
+        // 有未裁决的冲突 → 暂停自动发布，避免把「待裁决」的磁盘版本自动提交上线
+        syncAutoHold()
         return
       }
       set({ error: errorText(res), status: '' })
@@ -570,17 +731,22 @@ export const useCms = create<CmsState>((set, get) => ({
           : '没有需要写入的改动'
     })
     await get().refreshList()
+    // 保存成功 → 解除 hold 并让本地预览刷新（watcher 也可能随后再触发一次，无害）
+    set({ previewReloadToken: get().previewReloadToken + 1 })
+    syncAutoHold()
   },
 
   discard() {
     const { baseline, baselineBody } = get()
     set({ fields: { ...baseline }, body: baselineBody, preview: null, conflict: null, error: null, status: '已放弃改动' })
+    syncAutoHold()
   },
 
   async reloadFromDisk() {
     const { activeSection, activeSlug } = get()
     if (!activeSlug) return
     set({ conflict: null, externalChange: null })
+    syncAutoHold()
     await get().openEntry(activeSlug)
     set({ status: `已重新加载磁盘版本（${activeSection}/${activeSlug}）` })
   },
@@ -594,6 +760,7 @@ export const useCms = create<CmsState>((set, get) => ({
       externalChange: null,
       status: '已保留你的改动；保存时若与磁盘冲突，可在冲突提示中选择强制覆盖'
     })
+    syncAutoHold()
   },
 
   async validateWorkspace() {
@@ -916,4 +1083,5 @@ export const useCms = create<CmsState>((set, get) => ({
   clearDeployStatus() {
     set({ deployStatus: null, status: '已清除部署查询结果' })
   }
-}))
+  }
+})

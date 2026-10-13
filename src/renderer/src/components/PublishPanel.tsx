@@ -49,6 +49,17 @@ export default function PublishPanel({ onBack }: { onBack: () => void }) {
           </span>
         </div>
         <div className="doc-actions">
+          <label
+            className="auto-switch"
+            title="内容保存后自动「预检 → 提交 → 推送 → 回读部署」，上线需 1–3 分钟"
+          >
+            <input
+              type="checkbox"
+              checked={cms.autoPublish}
+              onChange={(event) => void cms.setAutoPublish(event.target.checked)}
+            />
+            <span>自动发布{cms.autoPublish ? '：开' : '：关'}</span>
+          </label>
           <button type="button" className="ghost" onClick={onBack}>
             返回编辑
           </button>
@@ -96,6 +107,36 @@ export default function PublishPanel({ onBack }: { onBack: () => void }) {
               <button type="button" className="ghost" onClick={() => void cms.resetPublish()} disabled={cms.publishing}>
                 清除状态
               </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {cms.autoPublishLast ? (
+        <div
+          className={`banner auto-publish ${
+            cms.autoPublishLast.kind === 'published'
+              ? 'ok'
+              : cms.autoPublishLast.kind === 'error'
+                ? 'err'
+                : ''
+          }`}
+        >
+          <div>
+            <strong>
+              {cms.autoPublishLast.kind === 'published'
+                ? '自动发布已推送'
+                : cms.autoPublishLast.kind === 'error'
+                  ? '自动发布失败'
+                  : '自动发布已跳过'}
+            </strong>
+            {cms.autoPublishLast.reason ? <span className="hint">　{cms.autoPublishLast.reason}</span> : null}
+            <div className="hint">
+              触发于 {new Date(cms.autoPublishLast.at).toLocaleTimeString()}
+              {cms.autoPublishLast.commitMessage ? `　${cms.autoPublishLast.commitMessage}` : ''}
+            </div>
+            {cms.autoPublishLast.files.length > 0 ? (
+              <div className="files">{cms.autoPublishLast.files.join('、')}</div>
             ) : null}
           </div>
         </div>

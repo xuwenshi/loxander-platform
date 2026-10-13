@@ -1,9 +1,13 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type {
   CmsApi,
+  AutoPublishEvent,
   ContentChangeEvent,
+  DeployStatus,
   FrontmatterPatch,
   FileFingerprint,
+  PreviewStatus,
+  PublishState,
   ReadyPayload,
   Settings
 } from './api'
@@ -38,6 +42,18 @@ interface SaveBodyPayload {
   body: string
   expected: FileFingerprint
   force?: boolean
+}
+
+/**
+ * 统一事件订阅封装：只透传 payload，绝不把 IpcRendererEvent（含 sender）泄漏给 renderer；
+ * 返回退订函数供 React 组件在 cleanup 中调用，避免热更新重复注册。
+ */
+function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_event: IpcRendererEvent, payload: T): void => cb(payload)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+  }
 }
 
 const api: CmsApi = {
@@ -84,7 +100,16 @@ const api: CmsApi = {
     retryPush: () => ipcRenderer.invoke('publish:retryPush'),
     revert: (payload?: { confirmed?: boolean; push?: boolean }) =>
       ipcRenderer.invoke('publish:revert', payload),
-    clear: () => ipcRenderer.invoke('publish:clear')
+    clear: () => ipcRenderer.invoke('publish:clear'),
+    setAuto: (auto: boolean) => ipcRenderer.invoke('publish:setAuto', auto),
+    autoHold: (hold: boolean) => ipcRenderer.invoke('publish:autoHold', hold)
+  },
+  preview: {
+    start: () => ipcRenderer.invoke('preview:start'),
+    stop: () => ipcRenderer.invoke('preview:stop'),
+    restart: () => ipcRenderer.invoke('preview:restart'),
+    status: () => ipcRenderer.invoke('preview:status'),
+    logs: () => ipcRenderer.invoke('preview:logs')
   },
   deploy: {
     status: (payload?: { provider?: 'github' | 'vercel'; sha?: string; wait?: boolean }) =>
@@ -92,17 +117,16 @@ const api: CmsApi = {
   },
   runtime: {
     ready: (payload: ReadyPayload) => ipcRenderer.invoke('runtime:ready', payload),
-    /**
-     * 订阅 content/ 目录的外部改动。只暴露这一个事件通道，且不透传 IpcRendererEvent
-     * （避免把 sender 等内部对象泄漏给 renderer）；返回退订函数供 React 清理。
-     */
-    onContentChanged: (cb: (event: ContentChangeEvent) => void) => {
-      const listener = (_event: IpcRendererEvent, payload: ContentChangeEvent): void => cb(payload)
-      ipcRenderer.on('content:changed', listener)
-      return () => {
-        ipcRenderer.removeListener('content:changed', listener)
-      }
-    }
+    /** 订阅 content/ 目录的外部改动 */
+    onContentChanged: (cb: (event: ContentChangeEvent) => void) => subscribe('content:changed', cb),
+    /** 订阅预览 dev server 状态 */
+    onPreviewEvent: (cb: (status: PreviewStatus) => void) => subscribe('preview:event', cb),
+    /** 订阅自动发布后的发布状态 */
+    onPublishChanged: (cb: (state: PublishState) => void) => subscribe('publish:changed', cb),
+    /** 订阅自动发布后的一次部署回读结果 */
+    onDeployChanged: (cb: (status: DeployStatus) => void) => subscribe('publish:deployChanged', cb),
+    /** 订阅自动发布的决策/结果（跳过原因、实际提交清单） */
+    onAutoPublishEvent: (cb: (event: AutoPublishEvent) => void) => subscribe('publish:autoEvent', cb)
   },
   versions: readVersions()
 }

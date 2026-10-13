@@ -1191,4 +1191,120 @@ button.danger-ghost:hover:not(:disabled) {
   line-height: 1.5;
   word-break: break-all;
 }
+
+/* ---------- A：本地实时预览（soft 模式右侧第 4 列，用 webview 承载真实博客页面） ---------- */
+
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+
+/* 常驻挂载（webview 不能卸载），仅非 soft 模式或未展开时靠 hidden 隐藏。
+ * 组件层的 display 会压过 UA 的 [hidden]{display:none}，必须显式声明。 */
+.preview-pane[hidden] {
+  display: none;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.preview-head .title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.preview-head .origin {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.preview-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* webview 在 flex 容器里必须显式给高度，否则会退化成 150px 的默认高度 */
+.preview-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: var(--bg);
+}
+
+.preview-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+.preview-logs {
+  max-height: 40%;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--muted);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ---------- B：自动发布（发布面板头部开关 + 结果 banner，绝不静默） ---------- */
+
+.auto-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auto-switch input {
+  cursor: pointer;
+}
+
+.auto-publish .files {
+  margin-top: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
 } /* @layer components 结束 */

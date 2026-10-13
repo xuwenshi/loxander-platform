@@ -30,7 +30,9 @@ import {
   retryPush,
   rollbackLast
 } from '../services/publishService'
-import { parseRepoSlug, pollDeploy, queryDeploy, type DeployProvider } from '../services/deployService'
+import { parseRepoSlug, pollDeploy, queryDeploy, type DeployProvider, type DeployStatus } from '../services/deployService'
+import { createDevServer, type DevServerHandle, type DevServerStatus } from '../services/devServerService'
+import { createAutoPublisher, type AutoPublishEvent, type AutoPublisher } from '../services/autoPublishService'
 import { createHttpClient } from '../services/httpClient'
 import {
   assignEntry,
@@ -116,6 +118,8 @@ function broadcastContentChange(event: ContentChangeEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send('content:changed', event)
   }
+  // 自动发布挂在这里：CMS 自己的保存同样会触发 watcher，因此不需要在 renderer 另开写路径
+  autoPublisher.onContentChanged(event)
 }
 
 /**
@@ -140,6 +144,167 @@ export function disposeContentWatcher(): void {
   watchedRoot = ''
 }
 
+/* ---- 本地实时预览（A）：dev server 生命周期 + webview 导航白名单 ---- */
+
+let devServer: DevServerHandle | null = null
+/** 当前 dev server 的配置指纹：workspaceRoot|port|nodePath 变化时需重建实例 */
+let devServerKey = ''
+/** webview 导航白名单：localhost 与 127.0.0.1 两种写法（端口以 dev server 回传为准） */
+const previewOrigins = new Set<string>()
+/** 最近一次预览状态：未创建句柄时也用得上（供 preview:status 同步返回） */
+let previewState: DevServerStatus = { state: 'stopped', pid: null, origin: null, port: null, message: null }
+
+function devServerFingerprint(settings: Settings, workspaceRoot: string): string {
+  return `${workspaceRoot}|${settings.previewPort}|${settings.nodePath}`
+}
+
+/** dev server 状态变化统一出口：登记白名单 + 广播给所有窗口 */
+function broadcastPreview(status: DevServerStatus): void {
+  previewState = status
+  previewOrigins.clear()
+  if (status.port) {
+    previewOrigins.add(`http://localhost:${status.port}`)
+    previewOrigins.add(`http://127.0.0.1:${status.port}`)
+  }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send('preview:event', status)
+  }
+}
+
+/** 取（必要时重建）当前工作区对应的 dev server 句柄；未配置工作区时报错 */
+function ensureDevServer(): DevServerHandle {
+  const root = requireWorkspaceRoot()
+  const settings = getSettings()
+  const key = devServerFingerprint(settings, root)
+  if (devServer && devServerKey === key) return devServer
+  // 配置变更：先停旧实例再建新实例（端口 / node / 工作区都可能换了）
+  if (devServer) {
+    void devServer.stop()
+    devServer = null
+  }
+  devServer = createDevServer({
+    workspaceRoot: root,
+    port: settings.previewPort,
+    nodePath: settings.nodePath || undefined,
+    onEvent: broadcastPreview
+  })
+  devServerKey = key
+  return devServer
+}
+
+/** webview 导航白名单（供主进程安全守卫读取）：只含本机 dev server origin */
+export function previewWhitelist(): string[] {
+  return [...previewOrigins]
+}
+
+/** 应用退出时停止预览 dev server（stop 内部同步 taskkill，故不 await 也安全） */
+export function disposePreview(): void {
+  void devServer?.stop()
+  devServer = null
+  devServerKey = ''
+  previewOrigins.clear()
+  previewState = { state: 'stopped', pid: null, origin: null, port: null, message: null }
+}
+
+/** 预览运行中且配置变更时：停旧起新，保证 webview 指向新端口/新工作区 */
+async function restartPreviewIfRunning(): Promise<void> {
+  if (!devServer) return
+  const wasRunning = previewState.state === 'ready' || previewState.state === 'starting'
+  await devServer.stop()
+  devServer = null
+  devServerKey = ''
+  if (wasRunning) await ensureDevServer().start()
+}
+
+/* ---- 线上自动发布（B）：content/ 变更 → debounce → 预检 → 提交 → 推送 → 回读部署 ---- */
+
+/** renderer 检测到冲突 / 外部改动时置位，暂停自动发布 */
+let autoHold = false
+
+/** 构造一次部署查询所需的公共参数（仓库标识留空时由 git remote 推导 owner/repo） */
+async function buildDeployQuery(provider: DeployProvider, sha: string): Promise<Parameters<typeof queryDeploy>[0]> {
+  const root = requireWorkspaceRoot()
+  const settings = getSettings()
+  let repository = settings.repository.trim()
+  if (!repository) {
+    repository = parseRepoSlug(await getRemoteUrl(root, settings.proxy, settings.remote)) ?? ''
+  }
+  return {
+    provider,
+    repository,
+    sha,
+    vercelToken: settings.vercelToken || undefined,
+    vercelProjectId: settings.vercelProjectId || undefined,
+    http: createHttpClient(settings.proxy)
+  }
+}
+
+function broadcastToWindows(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(channel, payload)
+  }
+}
+
+/** 自动发布的决策 / 结果一律显式广播，绝不静默 */
+function broadcastAutoPublish(event: AutoPublishEvent): void {
+  console.log(`[cms] 自动发布 ${event.kind}${event.reason ? '：' + event.reason : ''}`)
+  broadcastToWindows('publish:autoEvent', event)
+  if (event.kind !== 'published' || !event.state) return
+  // 通知 renderer 更新发布状态（renderer 收到后再复用既有 runDeployStatus 轮询）
+  broadcastToWindows('publish:changed', event.state)
+  if (event.state.phase === 'pushed' && event.state.commitSha) {
+    const sha = event.state.commitSha
+    void buildDeployQuery(getSettings().deployProvider, sha)
+      .then((options) => queryDeploy(options))
+      .then((deploy: DeployStatus) => broadcastToWindows('publish:deployChanged', deploy))
+      .catch((err) => console.warn('[cms] 自动发布后回读部署失败：' + (err instanceof Error ? err.message : String(err))))
+  }
+}
+
+/** 自动发布服务：特权动作注入（预检 / 发布 / 广播），服务本身不含 electron 依赖 */
+const autoPublisher: AutoPublisher = createAutoPublisher({
+  isEnabled: () => getSettings().autoPublish === true,
+  getDebounceMs: () => getSettings().autoPublishDebounceMs,
+  pathExists: (relativePath) => {
+    const root = getSettings().workspaceRoot
+    return Boolean(root) && existsSync(join(root, relativePath))
+  },
+  preflight: async () => {
+    const root = requireWorkspaceRoot()
+    const { proxy, remote, branch } = getSettings()
+    const report = await preflight({ workspaceRoot: root, proxy, remote, branch })
+    return { blocking: report.blocking.length, contentFiles: report.contentFiles }
+  },
+  publish: ({ message, files }) => {
+    const root = requireWorkspaceRoot()
+    const { proxy, remote, branch } = getSettings()
+    return publish({
+      workspaceRoot: root,
+      stateRoot: stateRoot(),
+      proxy,
+      remote,
+      branch,
+      message,
+      files,
+      confirmed: true
+    })
+  },
+  onEvent: broadcastAutoPublish
+})
+
+/**
+ * 抑制窗口包裹：publish / retryPush / rollback / pull 都会改写 content/，进而触发 watcher；
+ * 操作期间用长窗口屏蔽，结束后再补 1.5s，避免自动发布被自己触发成环。
+ */
+async function withSuppressedWatcher<T>(fn: () => Promise<T>): Promise<T> {
+  autoPublisher.suppress(120_000)
+  try {
+    return await fn()
+  } finally {
+    autoPublisher.suppress(1500)
+  }
+}
+
 interface SaveBodyPayload {
   section: string
   slug: string
@@ -150,10 +315,18 @@ interface SaveBodyPayload {
 
 export function registerIpcHandlers(): void {
   handle('settings:get', () => getSettings())
-  handle('settings:set', (patch: Partial<Settings>) => {
+  handle('settings:set', async (patch: Partial<Settings>) => {
     const next = updateSettings(patch)
     // 工作区根可能被改动：让 watcher 立即跟随新根
     if (patch?.workspaceRoot !== undefined) syncContentWatcher()
+    // 工作区 / 端口 / node 变化会影响 dev server 指向：正在预览则停旧起新
+    if (
+      patch?.workspaceRoot !== undefined ||
+      patch?.previewPort !== undefined ||
+      patch?.nodePath !== undefined
+    ) {
+      await restartPreviewIfRunning()
+    }
     return next
   })
 
@@ -169,6 +342,8 @@ export function registerIpcHandlers(): void {
     }
     const settings = updateSettings({ workspaceRoot: picked })
     syncContentWatcher()
+    // 换了工作区：预览必须跟着换（旧 dev server 指向的是老仓库）
+    await restartPreviewIfRunning()
     return { canceled: false, settings }
   })
 
@@ -318,11 +493,13 @@ export function registerIpcHandlers(): void {
     return preflight({ workspaceRoot: root, proxy, remote, branch })
   })
 
-  handle('git:pull', () => {
-    const root = requireWorkspaceRoot()
-    const { proxy, remote, branch } = getSettings()
-    return pullRecover({ workspaceRoot: root, proxy, remote, branch })
-  })
+  handle('git:pull', () =>
+    withSuppressedWatcher(() => {
+      const root = requireWorkspaceRoot()
+      const { proxy, remote, branch } = getSettings()
+      return pullRecover({ workspaceRoot: root, proxy, remote, branch })
+    })
+  )
 
   handle('publish:state', () => {
     const { remote, branch } = getSettings()
@@ -331,27 +508,30 @@ export function registerIpcHandlers(): void {
 
   handle(
     'publish:run',
-    (payload: { message?: unknown; files?: unknown; confirmed?: unknown }) => {
-      const root = requireWorkspaceRoot()
-      const { proxy, remote, branch } = getSettings()
-      return publish({
-        workspaceRoot: root,
-        stateRoot: stateRoot(),
-        proxy,
-        remote,
-        branch,
-        message: String(payload?.message ?? ''),
-        files: payload?.files,
-        confirmed: payload?.confirmed === true
+    (payload: { message?: unknown; files?: unknown; confirmed?: unknown }) =>
+      withSuppressedWatcher(() => {
+        const root = requireWorkspaceRoot()
+        const { proxy, remote, branch } = getSettings()
+        return publish({
+          workspaceRoot: root,
+          stateRoot: stateRoot(),
+          proxy,
+          remote,
+          branch,
+          message: String(payload?.message ?? ''),
+          files: payload?.files,
+          confirmed: payload?.confirmed === true
+        })
       })
-    }
   )
 
-  handle('publish:retryPush', () => {
-    const root = requireWorkspaceRoot()
-    const { proxy, remote, branch } = getSettings()
-    return retryPush({ workspaceRoot: root, stateRoot: stateRoot(), proxy, remote, branch })
-  })
+  handle('publish:retryPush', () =>
+    withSuppressedWatcher(() => {
+      const root = requireWorkspaceRoot()
+      const { proxy, remote, branch } = getSettings()
+      return retryPush({ workspaceRoot: root, stateRoot: stateRoot(), proxy, remote, branch })
+    })
+  )
 
   handle('publish:clear', () => {
     const { remote, branch } = getSettings()
@@ -359,24 +539,43 @@ export function registerIpcHandlers(): void {
   })
 
   // 一键回滚（P5 可选）：对上一次发布生成反向提交（git revert），绝不改写历史
-  handle('publish:revert', (payload?: { confirmed?: unknown; push?: unknown }) => {
-    const root = requireWorkspaceRoot()
-    const { proxy, remote, branch } = getSettings()
-    return rollbackLast({
-      workspaceRoot: root,
-      stateRoot: stateRoot(),
-      proxy,
-      remote,
-      branch,
-      confirmed: payload?.confirmed === true,
-      push: payload?.push !== false
+  handle('publish:revert', (payload?: { confirmed?: unknown; push?: unknown }) =>
+    withSuppressedWatcher(() => {
+      const root = requireWorkspaceRoot()
+      const { proxy, remote, branch } = getSettings()
+      return rollbackLast({
+        workspaceRoot: root,
+        stateRoot: stateRoot(),
+        proxy,
+        remote,
+        branch,
+        confirmed: payload?.confirmed === true,
+        push: payload?.push !== false
+      })
     })
+  )
+
+  // ---- 自动发布（B）：UI 开关 + hold（renderer 检测到冲突/外部改动时置位，暂停自动发布） ----
+
+  handle('publish:setAuto', (auto: unknown) => updateSettings({ autoPublish: auto === true }))
+
+  handle('publish:autoHold', (hold: unknown) => {
+    autoHold = hold === true
+    autoPublisher.setHold(autoHold)
+    return { hold: autoHold }
   })
+
+  // ---- 本地实时预览（A）：dev server 生命周期（webview 用独立 partition 承载真实页面）----
+
+  handle('preview:start', () => ensureDevServer().start())
+  handle('preview:stop', () => (devServer ? devServer.stop() : previewState))
+  handle('preview:restart', () => ensureDevServer().restart())
+  handle('preview:status', () => (devServer ? devServer.status() : previewState))
+  handle('preview:logs', () => (devServer ? devServer.logs() : ''))
 
   // ---- 部署回读（P4）：GitHub commit status（零配置）/ Vercel API（Token 增强） ----
 
   handle('deploy:status', async (payload?: { provider?: unknown; sha?: unknown; wait?: unknown }) => {
-    const root = requireWorkspaceRoot()
     const settings = getSettings()
 
     const provider: DeployProvider =
@@ -389,19 +588,7 @@ export function registerIpcHandlers(): void {
     const sha = String(payload?.sha ?? state.commitSha ?? '').trim()
 
     // 仓库标识：设置里优先；留空则从 git remote 推导 owner/repo
-    let repository = settings.repository.trim()
-    if (!repository) {
-      repository = parseRepoSlug(await getRemoteUrl(root, settings.proxy, settings.remote)) ?? ''
-    }
-
-    const common = {
-      provider,
-      repository,
-      sha,
-      vercelToken: settings.vercelToken || undefined,
-      vercelProjectId: settings.vercelProjectId || undefined,
-      http: createHttpClient(settings.proxy)
-    }
+    const common = await buildDeployQuery(provider, sha)
 
     // wait=false：只查一次（供 UI 快速刷新）；默认轮询到就绪/失败/超时
     if (payload?.wait === false) return queryDeploy(common)
@@ -417,4 +604,11 @@ export function registerIpcHandlers(): void {
 
   // 启动即按当前工作区开始监听 content/（未配置工作区时静默跳过）
   syncContentWatcher()
+
+  // 按设置决定是否开机即拉起本地预览 dev server（webview 面板默认不展开，用户点开即秒显示）
+  const boot = getSettings()
+  console.log(`[cms] 自动发布 = ${boot.autoPublish ? '开' : '关'}；本地预览自启 = ${boot.previewAutoStart ? '开' : '关'}`)
+  if (boot.previewAutoStart && boot.workspaceRoot) {
+    void ensureDevServer().start()
+  }
 }

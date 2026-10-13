@@ -51,6 +51,31 @@ export interface Settings {
    * 只存这里，不写进博客仓库、不改磁盘结构（博客读取内容不递归，建子目录会导致文章不上站）。
    */
   groups: GroupStore
+
+  /**
+   * ---- 本地实时预览 + 线上自动发布（A+B）----
+   * 两者默认开启：用户要的是「桌面 CMS 实时控制网页内容」，不再二选一。
+   */
+  /** 自动发布：内容保存或被外部改动后，自动「预检 → 提交 → 推送 → 回读部署」 */
+  autoPublish: boolean
+  /** 自动发布的 debounce 窗口（毫秒）：合并连续保存，避免一次编辑发多次提交 */
+  autoPublishDebounceMs: number
+  /** 应用启动后是否自动拉起本地预览 dev server（不影响预览面板是否默认展开） */
+  previewAutoStart: boolean
+  /** 本地预览 dev server 端口；被占用时 Next 会自增，实际端口以回传为准 */
+  previewPort: number
+  /** 运行 Next 用的 node 可执行文件；空 = 用 Electron 内置 node（ELECTRON_RUN_AS_NODE 模式） */
+  nodePath: string
+}
+
+/**
+ * 整数收敛：非法值（NaN / 非数字）或越界一律回落到边界/默认值。
+ * settings.json 可能被手工改坏（例如端口写成 -1），所以在读取与写入两处都收敛。
+ */
+export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(max, Math.max(min, Math.round(num)))
 }
 
 const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
@@ -67,7 +92,13 @@ const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
   colorScheme: 'dark',
   sidebarCollapsed: false,
   editorLayout: 'split',
-  groups: emptyGroupStore()
+  groups: emptyGroupStore(),
+  // 本地实时预览 + 线上自动发布：默认开启
+  autoPublish: true,
+  autoPublishDebounceMs: 4000,
+  previewAutoStart: true,
+  previewPort: 3210,
+  nodePath: ''
 }
 
 function settingsFile(): string {
@@ -124,6 +155,11 @@ interface StoredSettings {
   editorLayout?: string
   /** 落盘未经校验，读取时一律走 sanitizeGroups 收敛 */
   groups?: unknown
+  autoPublish?: unknown
+  autoPublishDebounceMs?: unknown
+  previewAutoStart?: unknown
+  previewPort?: unknown
+  nodePath?: unknown
 }
 
 function readStored(): StoredSettings {
@@ -164,7 +200,19 @@ export function getSettings(): Settings {
     editorLayout: EDITOR_LAYOUTS.includes(stored.editorLayout as EditorLayout)
       ? (stored.editorLayout as EditorLayout)
       : FALLBACK.editorLayout,
-    groups: sanitizeGroups(stored.groups)
+    groups: sanitizeGroups(stored.groups),
+    // 布尔项：非布尔一律回落到默认（默认 true），避免手改成字符串 "false" 被当成真值
+    autoPublish: typeof stored.autoPublish === 'boolean' ? stored.autoPublish : FALLBACK.autoPublish,
+    autoPublishDebounceMs: clampInt(
+      stored.autoPublishDebounceMs,
+      500,
+      60_000,
+      FALLBACK.autoPublishDebounceMs
+    ),
+    previewAutoStart:
+      typeof stored.previewAutoStart === 'boolean' ? stored.previewAutoStart : FALLBACK.previewAutoStart,
+    previewPort: clampInt(stored.previewPort, 1024, 65_535, FALLBACK.previewPort),
+    nodePath: typeof stored.nodePath === 'string' ? stored.nodePath.trim() : FALLBACK.nodePath
   }
 }
 
@@ -194,6 +242,21 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   }
   // 分组由 groupService 的纯函数算出后整份回传，这里只做收敛；不传则保留原值（next 已 spread 自 current）
   if (patch.groups !== undefined) next.groups = sanitizeGroups(patch.groups)
+  // 本地预览 / 自动发布：写入同样收敛，非法值回落到当前值
+  if (patch.autoPublish !== undefined) next.autoPublish = Boolean(patch.autoPublish)
+  if (patch.autoPublishDebounceMs !== undefined) {
+    next.autoPublishDebounceMs = clampInt(
+      patch.autoPublishDebounceMs,
+      500,
+      60_000,
+      next.autoPublishDebounceMs
+    )
+  }
+  if (patch.previewAutoStart !== undefined) next.previewAutoStart = Boolean(patch.previewAutoStart)
+  if (patch.previewPort !== undefined) {
+    next.previewPort = clampInt(patch.previewPort, 1024, 65_535, next.previewPort)
+  }
+  if (patch.nodePath !== undefined) next.nodePath = String(patch.nodePath).trim()
 
   const file = settingsFile()
   mkdirSync(resolve(file, '..'), { recursive: true })

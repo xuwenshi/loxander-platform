@@ -1,6 +1,11 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, session, shell } from 'electron'
-import { registerIpcHandlers, disposeContentWatcher } from './ipc'
+import {
+  registerIpcHandlers,
+  disposeContentWatcher,
+  disposePreview,
+  previewWhitelist
+} from './ipc'
 import { listContent } from './services/contentService'
 import { getSettings } from './services/settingsService'
 import { armSelfcheck, failSelfcheck } from './selfcheck'
@@ -51,6 +56,14 @@ function isAllowedNavigation(url: string): boolean {
   return url.startsWith('file://')
 }
 
+/**
+ * 预览 webview 的导航白名单：只允许本机 dev server 的 origin（含 localhost 与 127.0.0.1）。
+ * 白名单由主进程侧 devServer 的就绪事件动态登记（端口可能被 Next 自增）。
+ */
+function isPreviewUrl(url: string): boolean {
+  return previewWhitelist().some((origin) => url.startsWith(origin))
+}
+
 function openExternalSafe(url: string): void {
   try {
     if (new URL(url).protocol === 'https:') void shell.openExternal(url)
@@ -69,9 +82,26 @@ function applySecurityPolicies(): void {
     })
   })
 
+  /**
+   * 每个 WebContents 创建时都挂一遍守卫：
+   * - will-attach-webview：预览 <webview> 的安全基线（必须在 attach 之前把 preload 抹掉、
+   *   Node 关掉；src 不在预览白名单内直接拒绝挂载）。该事件挂在宿主 WebContents 上，不是 app。
+   * - will-navigate：webview 只允许预览 origin，主窗口/其它内容沿用原守卫逻辑。
+   */
   app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-attach-webview', (event, webPreferences, params) => {
+      delete webPreferences.preload
+      webPreferences.nodeIntegration = false
+      webPreferences.contextIsolation = true
+      webPreferences.sandbox = true
+      const src = typeof params.src === 'string' ? params.src : ''
+      if (!src || !isPreviewUrl(src)) event.preventDefault()
+    })
+
+    const isWebview = contents.getType() === 'webview'
     contents.on('will-navigate', (event, url) => {
-      if (!isAllowedNavigation(url)) event.preventDefault()
+      const allowed = isWebview ? isPreviewUrl(url) : isAllowedNavigation(url)
+      if (!allowed) event.preventDefault()
     })
     contents.setWindowOpenHandler(({ url }) => {
       openExternalSafe(url)
@@ -95,7 +125,9 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
-      spellcheck: false
+      spellcheck: false,
+      // 本地实时预览用 <webview> 承载真实博客页面（独立 partition，见 will-attach-webview 加固）
+      webviewTag: true
     }
   })
 
@@ -144,7 +176,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// 退出前释放 content/ 监听句柄，避免 fs.watch 残留
+// 退出前释放 content/ 监听句柄与预览 dev server，避免 fs.watch 与 node 子进程残留
 app.on('will-quit', () => {
   disposeContentWatcher()
+  // stop() 内部用 taskkill 同步收尾，这里不 await 也能保证进程树被清掉
+  disposePreview()
 })

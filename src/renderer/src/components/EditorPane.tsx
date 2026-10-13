@@ -17,6 +17,7 @@ export default function EditorPane({
   showForm,
   compact,
   hidden,
+  allowPreview,
   onRename,
   onDelete,
   onExitFocus
@@ -26,6 +27,8 @@ export default function EditorPane({
   /** 专注写作模式：精简操作区 */
   compact: boolean
   hidden: boolean
+  /** 是否提供「网站预览」开关（只有 soft 模式有第 4 列可展开） */
+  allowPreview: boolean
   onRename: () => void
   onDelete: () => void
   onExitFocus: () => void
@@ -60,6 +63,16 @@ export default function EditorPane({
                   <button type="button" className="ghost" onClick={() => void cms.runPreview()}>
                     查看差异
                   </button>
+                  {allowPreview ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      title="在右侧显示本地实时预览（真实博客页面），保存后秒级刷新"
+                      onClick={() => (cms.previewVisible ? cms.closePreview() : cms.openPreview())}
+                    >
+                      {cms.previewVisible ? '关闭预览' : '网站预览'}
+                    </button>
+                  ) : null}
                   <button type="button" className="ghost" onClick={onRename}>
                     重命名
                   </button>

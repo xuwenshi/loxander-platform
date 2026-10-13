@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import type { ContentGroup } from '../../preload/api'
 import EditorPane from './components/EditorPane'
 import EntryList from './components/EntryList'
+import PreviewPane from './components/PreviewPane'
 import PromptDialog from './components/PromptDialog'
 import PublishPanel from './components/PublishPanel'
 import Sidebar from './components/Sidebar'
 import { useCms } from './store'
-import { metaOf, sectionColor } from './theme'
+import { layoutColumns, metaOf, sectionColor } from './theme'
 
 /**
  * P1 界面外壳：一个 grid 主壳 + 由 settings.themeMode 决定的四种模式。
@@ -69,12 +70,19 @@ export default function App() {
     void cms.bootstrap()
     // 订阅外部改动；卸载时退订，避免热更新重复注册监听
     const unsubscribe = cms.initWatcher()
-    return unsubscribe
+    // 订阅预览状态 / 自动发布 / 部署回读事件
+    const unsubscribePreview = cms.initPreview()
+    return () => {
+      unsubscribe()
+      unsubscribePreview()
+    }
     // 只在首次挂载时初始化
   }, [])
 
   const meta = metaOf(cms.themeMode)
   const current = cms.sections.find((item) => item.section === cms.activeSection)
+  // 只有 soft 模式在预览展开时才有第 4 列；其余模式 previewVisible 会被 PreviewPane 的 hidden 忽略
+  const columns = layoutColumns(meta, { previewVisible: cms.previewVisible, collapsed: cms.sidebarCollapsed })
 
   // ---- 内容管理闭环（P3）：新建 / 重命名 / 删除（破坏性操作前均二次确认） ----
 
@@ -96,7 +104,7 @@ export default function App() {
   }
 
   return (
-    <div className={`grid h-full overflow-hidden ${cms.sidebarCollapsed ? meta.columnsCollapsed : meta.columns}`}>
+    <div className={`grid h-full overflow-hidden ${columns}`}>
       {meta.showSidebar ? <Sidebar /> : null}
 
       {meta.showEntries ? (
@@ -119,10 +127,14 @@ export default function App() {
         hidden={meta.mainPane !== 'editor'}
         showForm={meta.showForm}
         compact={cms.themeMode === 'writing'}
+        allowPreview={meta.mode === 'soft'}
         onRename={handleRename}
         onDelete={handleDelete}
         onExitFocus={() => void cms.setThemeMode('soft')}
       />
+
+      {/* 本地实时预览列（A）：常驻挂载（webview 不卸载），仅 soft 模式且用户展开时可见 */}
+      <PreviewPane hidden={meta.mode !== 'soft' || !cms.previewVisible} />
 
       {dialog === 'create' ? (
         <PromptDialog

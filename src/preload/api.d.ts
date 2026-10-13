@@ -28,6 +28,17 @@ export interface Settings {
    * 不写进博客仓库、不改磁盘结构（博客读取内容不递归，建子目录会让文章不上站）。
    */
   groups: GroupStore
+  /** ---- 本地实时预览 + 线上自动发布：默认都开启 ---- */
+  /** 内容保存 / content/ 变化后自动「预检 → 提交 → 推送 → 回读部署」 */
+  autoPublish: boolean
+  /** 自动发布 debounce 窗口（毫秒） */
+  autoPublishDebounceMs: number
+  /** 应用启动后自动拉起本地预览 dev server */
+  previewAutoStart: boolean
+  /** 本地预览 dev server 端口（占用时 Next 会自增，实际以回传为准） */
+  previewPort: number
+  /** 运行 Next 的 node 可执行文件；空 = 用 Electron 内置 node */
+  nodePath: string
 }
 
 export type CmsResult<T> =
@@ -356,6 +367,37 @@ export interface ContentChangeEvent {
   at: string
 }
 
+/** ---- 本地实时预览（A）：dev server 状态 ---- */
+
+export type PreviewState = 'stopped' | 'starting' | 'ready' | 'error'
+
+export interface PreviewStatus {
+  state: PreviewState
+  /** dev server 进程 pid（未运行为 null） */
+  pid: number | null
+  /** 真实 origin（如 http://localhost:3210），未解析到为 null */
+  origin: string | null
+  /** 实际端口（Next 自增后以回传为准） */
+  port: number | null
+  /** 错误/提示信息 */
+  message: string | null
+}
+
+/** ---- 线上自动发布（B）：一次决策/结果事件（UI 必须显式展示，绝不静默） ---- */
+
+export interface AutoPublishEvent {
+  kind: 'skipped' | 'published' | 'error'
+  /** 跳过原因 / 错误信息 */
+  reason: string | null
+  /** 本次实际参与提交的文件 */
+  files: string[]
+  /** 提交消息（发布成功时有值） */
+  commitMessage: string | null
+  /** 发布后的状态（发布成功时有值） */
+  state: PublishState | null
+  at: string
+}
+
 export interface CmsApi {
   settings: {
     get(): Promise<CmsResult<Settings>>
@@ -432,6 +474,19 @@ export interface CmsApi {
     /** 一键回滚（P5 可选）：对上一次发布生成反向提交（git revert），需 confirmed=true */
     revert(payload?: { confirmed?: boolean; push?: boolean }): Promise<CmsResult<PublishState>>
     clear(): Promise<CmsResult<PublishState>>
+    /** 开启 / 关闭自动发布（写 settings.json） */
+    setAuto(auto: boolean): Promise<CmsResult<Settings>>
+    /** 暂停 / 恢复自动发布：renderer 检测到冲突或外部改动时置位，避免自动改动被级联发布 */
+    autoHold(hold: boolean): Promise<CmsResult<{ hold: boolean }>>
+  }
+  /** 本地实时预览（A）：在主进程拉起 next dev，用 <webview> 加载真实页面 */
+  preview: {
+    start(): Promise<CmsResult<PreviewStatus>>
+    stop(): Promise<CmsResult<PreviewStatus>>
+    restart(): Promise<CmsResult<PreviewStatus>>
+    status(): Promise<CmsResult<PreviewStatus>>
+    /** dev server 的 stdout/stderr 环形缓冲日志（供「查看日志」） */
+    logs(): Promise<CmsResult<string>>
   }
   deploy: {
     /** wait=true（默认）轮询到就绪/失败/超时；wait=false 只查询一次 */
@@ -447,6 +502,14 @@ export interface CmsApi {
     ): Promise<CmsResult<{ acknowledged: boolean; selfcheck: boolean; appVersion: string }>>
     /** 订阅 content/ 目录的外部改动；返回退订函数（组件卸载时必须调用，避免监听泄漏） */
     onContentChanged(cb: (event: ContentChangeEvent) => void): () => void
+    /** 订阅预览 dev server 的状态变化；返回退订函数 */
+    onPreviewEvent(cb: (status: PreviewStatus) => void): () => void
+    /** 订阅「自动发布已推送」后的发布状态（renderer 据此刷新并轮询部署） */
+    onPublishChanged(cb: (state: PublishState) => void): () => void
+    /** 订阅自动发布后主进程的一次部署回读结果 */
+    onDeployChanged(cb: (status: DeployStatus) => void): () => void
+    /** 订阅自动发布的决策/结果（跳过原因、实际提交清单） */
+    onAutoPublishEvent(cb: (event: AutoPublishEvent) => void): () => void
   }
   versions: RuntimeVersions
 }

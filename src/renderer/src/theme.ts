@@ -14,6 +14,10 @@ export interface ThemeModeMeta {
   columns: string
   /** 侧栏折叠时的列模板（只让第一列变窄） */
   columnsCollapsed: string
+  /** 本地预览列展开时的列模板（只有 soft 模式有第 4 列；其余模式不显示预览列） */
+  columnsWithPreview?: string
+  /** 本地预览列展开 + 侧栏折叠时的列模板 */
+  columnsCollapsedWithPreview?: string
   /** 是否渲染左侧导航 */
   showSidebar: boolean
   /** 是否渲染条目列表列 */
@@ -31,6 +35,9 @@ export const THEME_MODE_META: readonly ThemeModeMeta[] = [
     hint: 'Markdown 编辑 + 实时预览',
     columns: 'grid-cols-[200px_264px_1fr]',
     columnsCollapsed: 'grid-cols-[56px_264px_1fr]',
+    // 预览列展开：在编辑列右侧再加一列承载真实博客页面（minmax 保证窄窗口下不被压没）
+    columnsWithPreview: 'grid-cols-[200px_264px_1fr_minmax(320px,1fr)]',
+    columnsCollapsedWithPreview: 'grid-cols-[56px_264px_1fr_minmax(320px,1fr)]',
     showSidebar: true,
     showEntries: true,
     mainPane: 'editor',
@@ -73,6 +80,22 @@ export const THEME_MODE_META: readonly ThemeModeMeta[] = [
 
 export function metaOf(mode: ThemeMode): ThemeModeMeta {
   return THEME_MODE_META.find((item) => item.mode === mode) ?? THEME_MODE_META[0]
+}
+
+/**
+ * 计算主壳的列模板：只有 soft 模式在预览展开时才有第 4 列。
+ * 注意：这里必须返回 theme.ts 中的**字面量类名**——Tailwind v4（JIT 静态扫描源码）
+ * 扫不到在运行时用模板字符串拼出来的类名，动态拼接会静默失效。
+ */
+export function layoutColumns(
+  meta: ThemeModeMeta,
+  options: { previewVisible: boolean; collapsed: boolean }
+): string {
+  const { previewVisible, collapsed } = options
+  if (previewVisible && meta.columnsWithPreview && meta.columnsCollapsedWithPreview) {
+    return collapsed ? meta.columnsCollapsedWithPreview : meta.columnsWithPreview
+  }
+  return collapsed ? meta.columnsCollapsed : meta.columns
 }
 
 /** 明暗两档（与模式正交）：浅色 / 深色 */
