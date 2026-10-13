@@ -23,6 +23,11 @@ export interface Settings {
   colorScheme: ColorScheme
   sidebarCollapsed: boolean
   editorLayout: EditorLayout
+  /**
+   * 内容虚拟分组（文件夹）：CMS 侧归类元数据，只存 <userData>/settings.json。
+   * 不写进博客仓库、不改磁盘结构（博客读取内容不递归，建子目录会让文章不上站）。
+   */
+  groups: GroupStore
 }
 
 export type CmsResult<T> =
@@ -38,6 +43,8 @@ export interface ContentEntry {
   size: number
   mtimeMs: number
   parseError: string | null
+  /** 所属虚拟分组 id；null = 未分组 */
+  groupId: string | null
 }
 
 export interface SectionSummary {
@@ -45,6 +52,20 @@ export interface SectionSummary {
   dir: string
   count: number
   entries: ContentEntry[]
+  /** 该分区的虚拟分组（文件夹） */
+  groups: ContentGroup[]
+}
+
+/** 一个虚拟分组（文件夹）：只存在于 CMS 侧，不落进博客仓库 */
+export interface ContentGroup {
+  id: string
+  name: string
+}
+
+/** 分组元数据：分组表（分区 → 分组）+ 归属表（`<section>/<slug>` → groupId） */
+export interface GroupStore {
+  groups: Record<string, ContentGroup[]>
+  assignments: Record<string, string>
 }
 
 export interface ContentListPayload {
@@ -380,6 +401,19 @@ export interface CmsApi {
       slug: string
       nextSlug: string
     }): Promise<CmsResult<RenameEntryResult>>
+  }
+  /** 内容虚拟分组（文件夹）：每个分区各自一份分组，只写 userData，不碰博客仓库 */
+  groups: {
+    create(payload: { section: string; name: string }): Promise<CmsResult<GroupStore>>
+    rename(payload: { section: string; id: string; name: string }): Promise<CmsResult<GroupStore>>
+    /** 删除文件夹只取消归类（条目回到「未分组」），不会删除任何 .md */
+    remove(payload: { section: string; id: string }): Promise<CmsResult<GroupStore>>
+    /** groupId 传 null = 移出分组 */
+    assign(payload: {
+      section: string
+      slug: string
+      groupId: string | null
+    }): Promise<CmsResult<GroupStore>>
   }
   git: {
     status(): Promise<CmsResult<GitStatus>>

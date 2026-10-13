@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { app } from 'electron'
 import { CmsError } from '../errors'
+import { emptyGroupStore, sanitizeGroups, type GroupStore } from './groupService'
 
 /**
  * 工作区与运行参数设置。
@@ -44,6 +45,12 @@ export interface Settings {
   colorScheme: ColorScheme
   sidebarCollapsed: boolean
   editorLayout: EditorLayout
+
+  /**
+   * ---- 内容虚拟分组（文件夹）：CMS 侧归类元数据 ----
+   * 只存这里，不写进博客仓库、不改磁盘结构（博客读取内容不递归，建子目录会导致文章不上站）。
+   */
+  groups: GroupStore
 }
 
 const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
@@ -59,7 +66,8 @@ const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
   themeMode: 'soft',
   colorScheme: 'dark',
   sidebarCollapsed: false,
-  editorLayout: 'split'
+  editorLayout: 'split',
+  groups: emptyGroupStore()
 }
 
 function settingsFile(): string {
@@ -114,6 +122,8 @@ interface StoredSettings {
   colorScheme?: string
   sidebarCollapsed?: boolean
   editorLayout?: string
+  /** 落盘未经校验，读取时一律走 sanitizeGroups 收敛 */
+  groups?: unknown
 }
 
 function readStored(): StoredSettings {
@@ -153,7 +163,8 @@ export function getSettings(): Settings {
     sidebarCollapsed: stored.sidebarCollapsed === true,
     editorLayout: EDITOR_LAYOUTS.includes(stored.editorLayout as EditorLayout)
       ? (stored.editorLayout as EditorLayout)
-      : FALLBACK.editorLayout
+      : FALLBACK.editorLayout,
+    groups: sanitizeGroups(stored.groups)
   }
 }
 
@@ -181,6 +192,8 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   if (patch.editorLayout !== undefined && EDITOR_LAYOUTS.includes(patch.editorLayout)) {
     next.editorLayout = patch.editorLayout
   }
+  // 分组由 groupService 的纯函数算出后整份回传，这里只做收敛；不传则保留原值（next 已 spread 自 current）
+  if (patch.groups !== undefined) next.groups = sanitizeGroups(patch.groups)
 
   const file = settingsFile()
   mkdirSync(resolve(file, '..'), { recursive: true })

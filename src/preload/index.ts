@@ -63,6 +63,14 @@ const api: CmsApi = {
     rename: (payload: { section: string; slug: string; nextSlug: string }) =>
       ipcRenderer.invoke('content:rename', payload)
   },
+  groups: {
+    create: (payload: { section: string; name: string }) => ipcRenderer.invoke('groups:create', payload),
+    rename: (payload: { section: string; id: string; name: string }) =>
+      ipcRenderer.invoke('groups:rename', payload),
+    remove: (payload: { section: string; id: string }) => ipcRenderer.invoke('groups:delete', payload),
+    assign: (payload: { section: string; slug: string; groupId: string | null }) =>
+      ipcRenderer.invoke('groups:assign', payload)
+  },
   git: {
     status: () => ipcRenderer.invoke('git:status'),
     diff: (scope?: { staged?: boolean; files?: string[] }) => ipcRenderer.invoke('git:diff', scope),

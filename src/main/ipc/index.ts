@@ -32,6 +32,15 @@ import {
 } from '../services/publishService'
 import { parseRepoSlug, pollDeploy, queryDeploy, type DeployProvider } from '../services/deployService'
 import { createHttpClient } from '../services/httpClient'
+import {
+  assignEntry,
+  createGroup,
+  deleteGroup,
+  dropAssignment,
+  moveAssignment,
+  renameGroup,
+  type GroupStore
+} from '../services/groupService'
 import { assertSection, SECTION_SCHEMAS } from '../services/schemaService'
 import { getSettings, updateSettings, type Settings } from '../services/settingsService'
 import { completeSelfcheck, isSelfcheck } from '../selfcheck'
@@ -227,12 +236,59 @@ export function registerIpcHandlers(): void {
 
   handle('content:delete', (payload: { section?: unknown; slug?: unknown }) => {
     const root = requireWorkspaceRoot()
-    return deleteEntry(root, backupRoot(), assertSection(payload?.section), payload?.slug as string)
+    const section = assertSection(payload?.section)
+    const slug = String(payload?.slug)
+    const result = deleteEntry(root, backupRoot(), section, slug)
+    // 级联：文件没了，虚拟分组的归属键也一并清掉，避免残留悬空归属
+    const before = getSettings().groups
+    const after = dropAssignment(before, section, slug)
+    if (after !== before) updateSettings({ groups: after })
+    return result
   })
 
   handle('content:rename', (payload: { section?: unknown; slug?: unknown; nextSlug?: unknown }) => {
     const root = requireWorkspaceRoot()
-    return renameEntry(root, assertSection(payload?.section), payload?.slug as string, payload?.nextSlug as string)
+    const section = assertSection(payload?.section)
+    const slug = String(payload?.slug)
+    const nextSlug = String(payload?.nextSlug)
+    const result = renameEntry(root, section, slug, nextSlug)
+    // 级联：归属以 slug 为键，改名后要把键迁到新 slug，否则归类丢失
+    const before = getSettings().groups
+    const after = moveAssignment(before, section, slug, nextSlug)
+    if (after !== before) updateSettings({ groups: after })
+    return result
+  })
+
+  // ---- 内容虚拟分组（文件夹）：只写 <userData>/settings.json，绝不触碰博客仓库 ----
+
+  /** 统一出口：读当前分组 → 纯函数变换 → 落盘 → 回传新值（变换未改动时直接返回原值，不写盘） */
+  function mutateGroups(mutate: (store: GroupStore) => GroupStore): GroupStore {
+    const before = getSettings().groups
+    const after = mutate(before)
+    if (after === before) return before
+    return updateSettings({ groups: after }).groups
+  }
+
+  handle('groups:create', (payload: { section?: unknown; name?: unknown }) => {
+    const section = assertSection(payload?.section)
+    return mutateGroups((store) => createGroup(store, section, payload?.name))
+  })
+
+  handle('groups:rename', (payload: { section?: unknown; id?: unknown; name?: unknown }) => {
+    const section = assertSection(payload?.section)
+    return mutateGroups((store) => renameGroup(store, section, String(payload?.id), payload?.name))
+  })
+
+  handle('groups:delete', (payload: { section?: unknown; id?: unknown }) => {
+    const section = assertSection(payload?.section)
+    return mutateGroups((store) => deleteGroup(store, section, String(payload?.id)))
+  })
+
+  handle('groups:assign', (payload: { section?: unknown; slug?: unknown; groupId?: unknown }) => {
+    const section = assertSection(payload?.section)
+    const raw = payload?.groupId
+    const groupId = raw === null || raw === undefined ? null : String(raw)
+    return mutateGroups((store) => assignEntry(store, section, String(payload?.slug), groupId))
   })
 
   // ---- Git 闸门（P2）：只读 + 显式文件清单；push/pull 注入代理 ----

@@ -130,6 +130,12 @@ interface CmsState {
   removeEntry: (slug: string) => Promise<void>
   renameEntry: (slug: string, nextSlug: string) => Promise<void>
 
+  /** ---- 虚拟分组（文件夹）：均作用于当前分区 ---- */
+  createGroup: (name: string) => Promise<void>
+  renameGroup: (id: string, name: string) => Promise<void>
+  deleteGroup: (id: string) => Promise<void>
+  assignEntry: (slug: string, groupId: string | null) => Promise<void>
+
   runPreflight: () => Promise<void>
   loadPublishState: () => Promise<void>
   togglePublishFile: (path: string) => void
@@ -671,6 +677,62 @@ export const useCms = create<CmsState>((set, get) => ({
     })
     await get().refreshList()
     await get().openEntry(nextSlug)
+  },
+
+  /**
+   * 虚拟分组（文件夹）：只写 <userData>/settings.json，不触碰博客仓库。
+   * 每个动作成功后 refreshList，让「分组表 + 归属」一起从主进程重新拉取（单一数据来源）。
+   */
+  async createGroup(name) {
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.groups.create({ section: get().activeSection, name })
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ error: null, status: `已新建文件夹「${name}」` })
+    await get().refreshList()
+  },
+
+  async renameGroup(id, name) {
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.groups.rename({ section: get().activeSection, id, name })
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ error: null, status: `文件夹已重命名为「${name}」` })
+    await get().refreshList()
+  },
+
+  async deleteGroup(id) {
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.groups.remove({ section: get().activeSection, id })
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ error: null, status: '文件夹已删除，原有条目回到「未分组」（未删除任何文件）' })
+    await get().refreshList()
+  },
+
+  async assignEntry(slug, groupId) {
+    const cms = window.cms
+    if (!cms) return
+    const { activeSection, sections } = get()
+    const name = groupId
+      ? (sections.find((item) => item.section === activeSection)?.groups.find((g) => g.id === groupId)?.name ?? '文件夹')
+      : '未分组'
+    const res = await cms.groups.assign({ section: activeSection, slug, groupId })
+    if (!res.ok) {
+      set({ error: errorText(res) })
+      return
+    }
+    set({ error: null, status: `已将 ${slug} 归入「${name}」` })
+    await get().refreshList()
   },
 
   async runPreflight() {

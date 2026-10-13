@@ -33,6 +33,12 @@ export type ErrorCode =
   | 'CONFIRM_REQUIRED'
   /** 新建条目时目标文件已存在 */
   | 'ENTRY_EXISTS'
+  /** 同分区内已有同名文件夹 */
+  | 'GROUP_EXISTS'
+  /** 文件夹名非法（为空 / 超长 / 非文本） */
+  | 'GROUP_NAME'
+  /** 目标文件夹不存在（可能已被删除） */
+  | 'GROUP_NOT_FOUND'
   /** 部署回读配置缺失（仓库标识 / Token / 项目 ID） */
   | 'DEPLOY_CONFIG'
   /** 部署回读的 HTTP 请求失败（含非 2xx） */

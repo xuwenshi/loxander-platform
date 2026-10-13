@@ -13,6 +13,7 @@ import { assertUnchanged } from './conflictService'
 import { planPatch, type FrontmatterPatch, type PatchChange } from './contentPatchService'
 import { diffLines, summarize, type DiffLine, type DiffSummary } from './diffService'
 import { assembleDocument, parseDocument } from './frontmatterService'
+import type { ContentGroup } from './groupService'
 import { CONTENT_SECTIONS, schemaOf, type ContentSection, type FieldSpec } from './schemaService'
 import { assertDeletable, validateFrontmatter, validatePatch, type Issue } from './validateService'
 
@@ -30,6 +31,8 @@ export interface ContentEntry {
   size: number
   mtimeMs: number
   parseError: string | null
+  /** 所属虚拟分组 id；null = 未分组（本层不感知分组，由 contentService 合并后覆盖） */
+  groupId: string | null
 }
 
 export interface SectionSummary {
@@ -37,6 +40,8 @@ export interface SectionSummary {
   dir: string
   count: number
   entries: ContentEntry[]
+  /** 该分区的虚拟分组（文件夹）；本层恒为空数组，由 contentService 合并后覆盖 */
+  groups: ContentGroup[]
 }
 
 export interface EntryDocument {
@@ -106,7 +111,8 @@ export function scanSection(workspaceRoot: string, section: ContentSection): Sec
           draft: false,
           size: stat.size,
           mtimeMs: stat.mtimeMs,
-          parseError: null
+          parseError: null,
+          groupId: null
         }
         try {
           const doc = parseDocument(readText(file))
@@ -126,7 +132,7 @@ export function scanSection(workspaceRoot: string, section: ContentSection): Sec
       throw new CmsError('FS_ERROR', `读取分区失败：${dir}`, err instanceof Error ? err.message : String(err))
     }
   }
-  return { section, dir, count: entries.length, entries }
+  return { section, dir, count: entries.length, entries, groups: [] }
 }
 
 export function scanAll(workspaceRoot: string): SectionSummary[] {

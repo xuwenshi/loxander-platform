@@ -952,6 +952,100 @@ button.ghost.block {
   margin: 0;
 }
 
+/* ---------- 虚拟分组（文件夹）：分区内的归类层，只存在于 CMS 侧 ---------- */
+
+.entries-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.entry-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.folder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.folder-head:hover {
+  background: var(--card-hover);
+}
+
+.folder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.folder-caret {
+  width: 10px;
+  text-align: center;
+}
+
+.folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.folder-count {
+  font-size: 11px;
+}
+
+/* 分组内条目缩进一格 + 左侧细线，视觉上从属于该文件夹 */
+.folder-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+/* 动作按钮默认隐藏、hover 或键盘聚焦时才出现，避免列表噪音 */
+.folder-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.folder-head:hover .folder-actions,
+.folder-actions:focus-within {
+  opacity: 1;
+}
+
+/* 条目行内的归类下拉：仅当该分区已有文件夹时渲染 */
+.entry-group-select {
+  margin-left: auto;
+  max-width: 92px;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
 button.danger-ghost:hover:not(:disabled) {
   border-color: var(--btn-danger-bg);
   color: var(--err-fg);

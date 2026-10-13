@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import type { ContentGroup } from '../../preload/api'
 import EditorPane from './components/EditorPane'
+import EntryList from './components/EntryList'
 import PromptDialog from './components/PromptDialog'
 import PublishPanel from './components/PublishPanel'
 import Sidebar from './components/Sidebar'
@@ -15,7 +17,7 @@ import { metaOf, sectionColor } from './theme'
  * 模式切换只改 <html data-mode> 与列模板，编辑区组件保持挂载。
  */
 
-type DialogKind = 'create' | 'rename'
+type DialogKind = 'create' | 'rename' | 'group-new' | 'group-rename'
 
 /** 管理模式的内容概览（P1 仅统计；列表筛选、发布历史在 P3 补齐） */
 function DashboardPane() {
@@ -60,6 +62,8 @@ function DashboardPane() {
 export default function App() {
   const cms = useCms()
   const [dialog, setDialog] = useState<DialogKind | null>(null)
+  /** 正在改名/删除的文件夹（group-rename 弹窗需要它） */
+  const [groupTarget, setGroupTarget] = useState<ContentGroup | null>(null)
 
   useEffect(() => {
     void cms.bootstrap()
@@ -96,34 +100,14 @@ export default function App() {
       {meta.showSidebar ? <Sidebar /> : null}
 
       {meta.showEntries ? (
-        <section className="entries h-full min-w-0">
-          <div className="entries-head">
-            <h2>{current ? `content/${current.section}` : '内容'}</h2>
-            <button type="button" className="ghost" onClick={handleCreate} disabled={!current}>
-              + 新建
-            </button>
-          </div>
-          <div className="entries-list">
-            {current?.entries.map((entry) => (
-              <div
-                key={entry.slug}
-                className={`entry${entry.slug === cms.activeSlug ? ' active' : ''}`}
-                onClick={() => void cms.openEntry(entry.slug)}
-              >
-                <div className="entry-title">
-                  {entry.title ?? <span className="badge err-badge">缺 title</span>}
-                </div>
-                <div className="entry-meta">
-                  <span className="slug">{entry.slug}</span>
-                  <span>{entry.date ?? '—'}</span>
-                  {entry.draft ? <span className="badge draft">draft</span> : null}
-                  {entry.parseError ? <span className="badge err-badge">解析失败</span> : null}
-                </div>
-              </div>
-            ))}
-            {current && current.count === 0 ? <p className="hint">该分区暂无 Markdown 文件。</p> : null}
-          </div>
-        </section>
+        <EntryList
+          onNewEntry={handleCreate}
+          onNewGroup={() => setDialog('group-new')}
+          onRenameGroup={(group) => {
+            setGroupTarget(group)
+            setDialog('group-rename')
+          }}
+        />
       ) : null}
 
       {meta.mainPane === 'dashboard' ? <DashboardPane /> : null}
@@ -167,6 +151,39 @@ export default function App() {
             const next = values.slug.trim()
             setDialog(null)
             if (from && next && next !== from) void cms.renameEntry(from, next)
+          }}
+        />
+      ) : null}
+
+      {dialog === 'group-new' ? (
+        <PromptDialog
+          title={`在 content/${cms.activeSection}/ 下新建文件夹`}
+          confirmText="创建"
+          fields={[{ key: 'name', label: '文件夹名', placeholder: '例如：2026 / 随笔' }]}
+          onCancel={() => setDialog(null)}
+          onConfirm={(values) => {
+            const name = values.name.trim()
+            setDialog(null)
+            if (name) void cms.createGroup(name)
+          }}
+        />
+      ) : null}
+
+      {dialog === 'group-rename' && groupTarget ? (
+        <PromptDialog
+          title="重命名文件夹"
+          confirmText="重命名"
+          fields={[{ key: 'name', label: '文件夹名', defaultValue: groupTarget.name }]}
+          onCancel={() => {
+            setGroupTarget(null)
+            setDialog(null)
+          }}
+          onConfirm={(values) => {
+            const name = values.name.trim()
+            const target = groupTarget
+            setGroupTarget(null)
+            setDialog(null)
+            if (target && name && name !== target.name) void cms.renameGroup(target.id, name)
           }}
         />
       ) : null}
