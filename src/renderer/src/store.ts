@@ -106,6 +106,8 @@ interface CmsState {
   /** ---- 本地实时预览（A）：把真实博客页面内嵌在右侧第 4 列 ---- */
   previewVisible: boolean
   previewStatus: PreviewStatus
+  /** 期望的预览端口（落盘 settings.previewPort；被占用时主进程自动向后找空闲端口） */
+  previewPort: number
   /** 保存 / 内容变更后自增；PreviewPane 监听到即 reloadIgnoringCache() 刷新 */
   previewReloadToken: number
   previewLogs: string
@@ -173,6 +175,8 @@ interface CmsState {
   stopPreview: () => Promise<void>
   restartPreview: () => Promise<void>
   refreshPreviewLogs: () => Promise<void>
+  /** 设置预览端口并落盘；若预览正在运行，主进程会停旧起新（换到新端口） */
+  setPreviewPort: (port: number) => Promise<void>
   setAutoPublish: (auto: boolean) => Promise<void>
   /** 处理主进程推送的自动发布事件（跳过原因 / 实际提交清单） */
   handleAutoPublishEvent: (event: AutoPublishEvent) => void
@@ -247,7 +251,16 @@ export const useCms = create<CmsState>((set, get) => {
   deploying: false,
   deployProvider: 'github',
   previewVisible: false,
-  previewStatus: { state: 'stopped', pid: null, origin: null, port: null, message: null },
+  previewStatus: {
+    state: 'stopped',
+    pid: null,
+    origin: null,
+    port: null,
+    message: null,
+    verified: null,
+    verifyStatus: null
+  },
+  previewPort: 3210,
   previewReloadToken: 0,
   previewLogs: '',
   autoPublish: true,
@@ -296,9 +309,17 @@ export const useCms = create<CmsState>((set, get) => {
       sidebarCollapsed: settingsRes.ok ? settingsRes.data.sidebarCollapsed : false,
       editorLayout: settingsRes.ok ? settingsRes.data.editorLayout : 'split',
       autoPublish: settingsRes.ok ? settingsRes.data.autoPublish : true,
+      previewPort: settingsRes.ok ? settingsRes.data.previewPort : 3210,
       busy: false,
       status: `已加载 ${sections.reduce((sum, item) => sum + item.count, 0)} 篇内容`
     })
+
+    /**
+     * 启动即展开预览列（用户确认的交互）：打开软件就能看到预览是否正常。
+     * 只在已配置工作区时展开——否则会展开一个必然报错的空面板；
+     * 非 soft 模式下 PreviewPane 本来就是 hidden，这里不强制切模式。
+     */
+    if (listRes.data.workspaceRoot) set({ previewVisible: true })
 
     // 自检模式据此判定链路打通（含分区计数）
     await cms.runtime.ready({
@@ -577,6 +598,28 @@ export const useCms = create<CmsState>((set, get) => {
     const next = !get().sidebarCollapsed
     set({ sidebarCollapsed: next })
     void window.cms?.settings.set({ sidebarCollapsed: next })
+  },
+
+  /**
+   * 预览端口：落盘 settings.previewPort。
+   * 主进程侧 devServerFingerprint 含 previewPort，且 settings:set 之后会
+   * restartPreviewIfRunning()，所以预览在跑时会自动停旧起新、换到新端口。
+   */
+  async setPreviewPort(port) {
+    const next = Math.max(1024, Math.min(65_535, Math.round(port)))
+    if (!Number.isFinite(next)) return
+    const previous = get().previewPort
+    if (next === previous) return
+
+    set({ previewPort: next })
+    const cms = window.cms
+    if (!cms) return
+    const res = await cms.settings.set({ previewPort: next })
+    if (!res.ok) {
+      set({ previewPort: previous, error: errorText(res) })
+      return
+    }
+    set({ previewPort: res.data.previewPort, status: `预览端口已设为 ${res.data.previewPort}` })
   },
 
   selectSection(section) {

@@ -4,7 +4,8 @@ import {
   registerIpcHandlers,
   disposeContentWatcher,
   disposePreview,
-  previewWhitelist
+  previewWhitelist,
+  autoStartPreview
 } from './ipc'
 import { listContent } from './services/contentService'
 import { getSettings } from './services/settingsService'
@@ -165,6 +166,8 @@ void app.whenReady().then(() => {
   registerIpcHandlers()
   logStartupSummary()
   createWindow()
+  // 窗口必须先存在：dev server 的状态事件按窗口广播，创建前启动会把事件全丢掉
+  autoStartPreview()
   armSelfcheck()
 
   app.on('activate', () => {

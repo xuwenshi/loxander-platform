@@ -53,7 +53,7 @@ function normalizeHeaders(headers: Record<string, string[] | string>): Record<st
   return out
 }
 
-function perform(ses: Session, request: HttpRequest): Promise<HttpResponse> {
+function perform(ses: Session, request: HttpRequest, timeoutMs = REQUEST_TIMEOUT): Promise<HttpResponse> {
   return new Promise<HttpResponse>((resolve, reject) => {
     const req = net.request({
       url: request.url,
@@ -72,8 +72,8 @@ function perform(ses: Session, request: HttpRequest): Promise<HttpResponse> {
       if (settled) return
       settled = true
       req.abort()
-      reject(new Error(`请求超时（${REQUEST_TIMEOUT}ms）：${request.url}`))
-    }, REQUEST_TIMEOUT)
+      reject(new Error(`请求超时（${timeoutMs}ms）：${request.url}`))
+    }, timeoutMs)
 
     const finish = (fn: () => void): void => {
       if (settled) return
@@ -106,5 +106,57 @@ export function createHttpClient(proxy: string): HttpClient {
   return async (request) => {
     const ses = await sessionFor(proxy)
     return perform(ses, request)
+  }
+}
+
+/* ---- 本地预览健康探测 ---- */
+
+/**
+ * 直连专用分区：**绝不能**复用 createHttpClient —— 它会把请求交给
+ * socks5 代理，而代理不认 localhost，探测必然失败并把正常的预览误判成故障。
+ */
+const LOCAL_PARTITION = 'cms-local-probe'
+
+let localSession: Session | null = null
+
+async function localDirectSession(): Promise<Session> {
+  if (localSession) return localSession
+  const ses = session.fromPartition(LOCAL_PARTITION)
+  // 显式直连：即使系统/应用层配了代理，本机探测也走直连
+  await ses.setProxy({ proxyRules: 'direct://' })
+  localSession = ses
+  return ses
+}
+
+/** 探测结果：ok 为 2xx/3xx 才算页面真的能打开 */
+export interface ProbeResult {
+  ok: boolean
+  status: number | null
+}
+
+/**
+ * 本地探测专用超时：必须比线上请求宽松得多。
+ * Next 打印 `Ready` 时只是「HTTP 服务已监听」，**首次请求才会触发整页编译**
+ * （Cache Components 全量 SSR 可达十几秒）。用默认 20s 会在冷启动时误报「页面无响应」。
+ */
+const PROBE_TIMEOUT = 60_000
+
+/**
+ * 生成一个「直连探测本机预览」的函数，注入给 devServerService（保持其不 import electron）。
+ * 只用于 localhost/127.0.0.1，不会用于线上地址。
+ */
+export function createLocalProbe(): (origin: string) => Promise<ProbeResult> {
+  return async (origin: string): Promise<ProbeResult> => {
+    try {
+      const ses = await localDirectSession()
+      const res = await perform(
+        ses,
+        { url: origin, method: 'GET', headers: { accept: 'text/html' } },
+        PROBE_TIMEOUT
+      )
+      return { ok: res.status >= 200 && res.status < 400, status: res.status }
+    } catch {
+      return { ok: false, status: null }
+    }
   }
 }

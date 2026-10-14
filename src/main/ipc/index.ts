@@ -33,7 +33,7 @@ import {
 import { parseRepoSlug, pollDeploy, queryDeploy, type DeployProvider, type DeployStatus } from '../services/deployService'
 import { createDevServer, type DevServerHandle, type DevServerStatus } from '../services/devServerService'
 import { createAutoPublisher, type AutoPublishEvent, type AutoPublisher } from '../services/autoPublishService'
-import { createHttpClient } from '../services/httpClient'
+import { createHttpClient, createLocalProbe } from '../services/httpClient'
 import {
   assignEntry,
   createGroup,
@@ -152,7 +152,15 @@ let devServerKey = ''
 /** webview 导航白名单：localhost 与 127.0.0.1 两种写法（端口以 dev server 回传为准） */
 const previewOrigins = new Set<string>()
 /** 最近一次预览状态：未创建句柄时也用得上（供 preview:status 同步返回） */
-let previewState: DevServerStatus = { state: 'stopped', pid: null, origin: null, port: null, message: null }
+let previewState: DevServerStatus = {
+  state: 'stopped',
+  pid: null,
+  origin: null,
+  port: null,
+  message: null,
+  verified: null,
+  verifyStatus: null
+}
 
 function devServerFingerprint(settings: Settings, workspaceRoot: string): string {
   return `${workspaceRoot}|${settings.previewPort}|${settings.nodePath}`
@@ -186,7 +194,9 @@ function ensureDevServer(): DevServerHandle {
     workspaceRoot: root,
     port: settings.previewPort,
     nodePath: settings.nodePath || undefined,
-    onEvent: broadcastPreview
+    onEvent: broadcastPreview,
+    // 直连探测本机预览（不走 socks5 代理），就绪后校验页面真的能打开
+    probe: createLocalProbe()
   })
   devServerKey = key
   return devServer
@@ -203,17 +213,38 @@ export function disposePreview(): void {
   devServer = null
   devServerKey = ''
   previewOrigins.clear()
-  previewState = { state: 'stopped', pid: null, origin: null, port: null, message: null }
+  previewState = {
+    state: 'stopped',
+    pid: null,
+    origin: null,
+    port: null,
+    message: null,
+    verified: null,
+    verifyStatus: null
+  }
 }
 
-/** 预览运行中且配置变更时：停旧起新，保证 webview 指向新端口/新工作区 */
+/**
+ * 配置变更（工作区 / 端口 / node）后重建 dev server。
+ *
+ * 两种要起的情形：
+ * - 本来就在跑（ready/starting）：停旧起新，保证 webview 指向新端口/新工作区。
+ * - **此前从未创建过句柄**（打包后首启没配工作区，`autoStartPreview` 直接报了错）：
+ *   现在刚选中工作区，若允许自启就应当拉起——否则 PreviewPane 里
+ *   「指定仓库后预览会自动重启」这句提示就是假的。
+ *
+ * 用户手动「停止」过的情况不会走到上面两条：句柄仍在且 state 为 stopped。
+ */
 async function restartPreviewIfRunning(): Promise<void> {
-  if (!devServer) return
+  const settings = getSettings()
   const wasRunning = previewState.state === 'ready' || previewState.state === 'starting'
-  await devServer.stop()
-  devServer = null
-  devServerKey = ''
-  if (wasRunning) await ensureDevServer().start()
+  const firstRun = !devServer && settings.previewAutoStart && Boolean(settings.workspaceRoot)
+  if (devServer) {
+    await devServer.stop()
+    devServer = null
+    devServerKey = ''
+  }
+  if (wasRunning || firstRun) await ensureDevServer().start()
 }
 
 /* ---- 线上自动发布（B）：content/ 变更 → debounce → 预检 → 提交 → 推送 → 回读部署 ---- */
@@ -604,11 +635,36 @@ export function registerIpcHandlers(): void {
 
   // 启动即按当前工作区开始监听 content/（未配置工作区时静默跳过）
   syncContentWatcher()
+}
 
-  // 按设置决定是否开机即拉起本地预览 dev server（webview 面板默认不展开，用户点开即秒显示）
+/**
+ * 启动即拉起本地预览（按设置 previewAutoStart 决定）。
+ *
+ * **必须在 createWindow() 之后调用**：dev server 的状态广播走
+ * `BrowserWindow.getAllWindows()`，若在窗口创建前启动，启动期的
+ * starting/ready 事件会遍历到空数组而全部丢失（此前就是这样，
+ * 只能靠 renderer 侧 preview:status 补拉兜底）。
+ */
+export function autoStartPreview(): void {
   const boot = getSettings()
   console.log(`[cms] 自动发布 = ${boot.autoPublish ? '开' : '关'}；本地预览自启 = ${boot.previewAutoStart ? '开' : '关'}`)
-  if (boot.previewAutoStart && boot.workspaceRoot) {
-    void ensureDevServer().start()
+  if (!boot.previewAutoStart) {
+    broadcastPreview(previewState)
+    return
   }
+  if (!boot.workspaceRoot) {
+    // 未配置工作区：明确告知而不是静默跳过（打包后首启的典型情况）
+    previewState = {
+      state: 'error',
+      pid: null,
+      origin: null,
+      port: null,
+      message: '尚未配置内容工作区，无法启动本地预览',
+      verified: null,
+      verifyStatus: null
+    }
+    broadcastPreview(previewState)
+    return
+  }
+  void ensureDevServer().start()
 }

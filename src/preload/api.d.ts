@@ -381,6 +381,10 @@ export interface PreviewStatus {
   port: number | null
   /** 错误/提示信息 */
   message: string | null
+  /** 就绪后主动 HTTP 探测的结果：null = 未探测/不适用，true = 页面可访问 */
+  verified: boolean | null
+  /** 探测拿到的 HTTP 状态码（无响应时为 null） */
+  verifyStatus: number | null
 }
 
 /** ---- 线上自动发布（B）：一次决策/结果事件（UI 必须显式展示，绝不静默） ---- */

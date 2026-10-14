@@ -1,6 +1,50 @@
+import { useEffect, useState } from 'react'
 import ThemeSelector from './ThemeSelector'
 import { sectionColor } from '../theme'
 import { useCms } from '../store'
+
+/**
+ * 预览端口输入：受控于本地 state，失焦 / 回车才落盘，
+ * 避免每敲一位数字就触发主进程重启 dev server。
+ */
+function PreviewPortField() {
+  const cms = useCms()
+  const [draft, setDraft] = useState(String(cms.previewPort))
+
+  // 外部（settings.json / bootstrap）变化时同步回输入框
+  useEffect(() => {
+    setDraft(String(cms.previewPort))
+  }, [cms.previewPort])
+
+  const commit = (): void => {
+    const parsed = Number.parseInt(draft, 10)
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(cms.previewPort))
+      return
+    }
+    void cms.setPreviewPort(parsed)
+  }
+
+  return (
+    <label className="flex items-center justify-between gap-2 text-[12px] text-[var(--muted)]">
+      <span>预览端口</span>
+      <input
+        className="w-[72px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-right text-[12px] text-[var(--text)]"
+        inputMode="numeric"
+        min={1024}
+        max={65535}
+        title="被占用时自动向后寻找空闲端口；留空或非法值会还原"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+          if (event.key === 'Escape') setDraft(String(cms.previewPort))
+        }}
+      />
+    </label>
+  )
+}
 
 /**
  * 左导航（P1）：模式选择 + 内容分区树 + 工作区操作。
@@ -89,6 +133,7 @@ export default function Sidebar() {
         <button type="button" className="ghost block" onClick={() => void cms.pickWorkspace()}>
           选择工作区…
         </button>
+        {collapsed ? null : <PreviewPortField />}
         {collapsed ? null : <div className="ws-path">{cms.workspaceRoot || '未配置工作区'}</div>}
         {!cms.bridgeOk ? <div className="err tiny">preload 桥未就绪</div> : null}
       </div>

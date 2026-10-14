@@ -27,6 +27,10 @@ export default function PreviewPane({ hidden }: { hidden: boolean }) {
   const status = cms.previewStatus
   const origin = status.origin
   const ready = status.state === 'ready' && Boolean(origin)
+  /** 就绪后主进程会主动 GET 一次 origin：false 表示进程在监听但页面打不开（编译错误 / 500） */
+  const probeFailed = ready && status.verified === false
+  /** 未配置工作区时主进程会直接给出 error 态，这里据此展示明确的修复指引 */
+  const noWorkspace = !cms.workspaceRoot
 
   /** 用 no-cache 重载一次；webview 未 dom-ready / guest 已崩时调用会抛异常，一律吞掉 */
   const softReload = (): void => {
@@ -74,6 +78,16 @@ export default function PreviewPane({ hidden }: { hidden: boolean }) {
         <span className="title">
           网站预览
           {origin ? <span className="origin">{origin}</span> : null}
+          {/*
+            健康探测徽标：就绪 ≠ 页面能打开。探测失败时进程仍在跑（可能是编译报错），
+            所以这里只做标注，不阻止 webview 渲染——用户仍能看到 Next 自己的错误页。
+          */}
+          {probeFailed ? (
+            <span className="tiny" style={{ color: 'var(--err, #f87171)' }}>
+              页面无响应
+              {status.verifyStatus === null ? '' : `（HTTP ${status.verifyStatus}）`}
+            </span>
+          ) : null}
         </span>
         <span className="preview-actions">
           {ready ? (
@@ -124,7 +138,16 @@ export default function PreviewPane({ hidden }: { hidden: boolean }) {
           />
         ) : (
           <div className="preview-placeholder">
-            {status.state === 'starting' ? (
+            {noWorkspace ? (
+              <>
+                <p className="err">尚未配置内容工作区</p>
+                <p className="hint">
+                  本地预览需要一个 my-blog 仓库根目录才能拉起 next dev。
+                  <br />
+                  点左下角「选择工作区…」指定仓库后，预览会自动重启。
+                </p>
+              </>
+            ) : status.state === 'starting' ? (
               <p className="hint">正在启动本地预览（首次编译可能需要十几秒）…</p>
             ) : status.state === 'error' ? (
               <>
