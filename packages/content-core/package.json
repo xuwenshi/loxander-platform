@@ -1,0 +1,22 @@
+{
+  "name": "@loxander/content-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loxander 内容核心：四类内容的 Zod schema、slug 规则、发布状态与三段式校验入口",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.5"
+  }
+}
