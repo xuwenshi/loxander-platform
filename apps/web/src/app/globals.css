@@ -1,0 +1,627 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* 暗色模式使用 .dark 类切换（而不是系统媒体查询），
+   这样用户可以在 Light / Dark / System 之间自由选择。 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   设计令牌 · 唯一语义来源
+   分三层，职责不重叠：
+     ① 「短名」—— 字面量所在处，既有 Tailwind 工具类（bg-surface 等）依赖它
+     ② 「规范名」--color-* —— 任务书要求的语义命名，指向短名，新增代码优先用它
+     ③ 「@theme」—— 把需要工具类化的令牌暴露给 Tailwind
+   规范名引用短名而不是反过来，这样既有的 background/surface/accent 等工具类
+   完全不受影响，改色时只需要动字面量一处。
+--------------------------------------------------------------------------- */
+:root {
+  /* ① 短名（既有，保持原值不动） */
+  --background: #ffffff;
+  --surface: #f6f8fc;
+  --elevated: #ffffff;
+  --foreground: #0f172a;
+  --muted: #5b6880;
+  --border: #e3e8f0;
+  --accent: #1d4ed8;
+  --accent-hover: #1e3fae;
+  --ring: #93b4ff;
+
+  /* ① 新增短名 */
+  --muted-deep: #7c879b; /* 第三级文字：占位说明、时间戳 */
+  --on-accent: #ffffff; /* 铺在 accent 实底上的文字（对比度：白 on #1d4ed8 ≈ 7.4:1） */
+  --accent-alt: #0e7490; /* 次强调色：青，用于次级强调，不与主强调争抢 */
+  --border-focus: #1d4ed8; /* 键盘焦点边框 */
+  --success: #15803d; /* on --surface ≈ 4.7:1 */
+  --warning: #b45309;
+  --error: #b91c1c;
+
+  /* ② 规范名（任务书 4.1 清单，全部指向短名） */
+  --color-bg-primary: var(--background);
+  --color-bg-secondary: var(--surface);
+  --color-bg-surface: var(--elevated);
+  --color-text-primary: var(--foreground);
+  --color-text-secondary: var(--muted);
+  --color-text-muted: var(--muted-deep);
+  --color-accent: var(--accent);
+  --color-accent-secondary: var(--accent-alt);
+  --color-accent-contrast: var(--on-accent);
+  --color-border: var(--border);
+  --color-border-focus: var(--border-focus);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  /* ---- 宇宙层恒定配色（不受 Light / Dark 主题影响）---- */
+  --cosmic-void: #03040a;
+  --cosmic-deep: #060a18;
+  --cosmic-ice: #8fe3ff;
+  --cosmic-violet: #c9b6ff;
+  --cosmic-silver: #e8ecf6;
+  --cosmic-warm: #ffe9c7;
+  --cosmic-text: #eef2fb;
+  --cosmic-muted: #a7b2cc;
+  --cosmic-line: rgba(232, 236, 246, 0.14);
+
+  /* ---- 时长令牌 ----
+     只有「不随主题变化、又需要被 JS 之外的 CSS 复用」的量才放这里。
+     转场遮罩的时长由 TransitionProvider 的 JS 计时器驱动（CSS 动画时长由
+     内联 style 注入），因此那组数值的唯一来源仍在 TS 里，不在此处重复。 */
+  --dur-instant: 120ms; /* reduced-motion 下的极短淡入淡出 */
+  --dur-fast: 180ms; /* hover / focus 反馈 */
+  --dur-base: 320ms; /* 常规淡入、缩放 */
+  --dur-slow: 380ms; /* 转场覆盖（与 TransitionProvider 的 warp.cover 对齐） */
+  --dur-reveal: 300ms; /* 转场揭开 / 页面入场（与 warp.reveal 对齐） */
+}
+
+/* 暗色 = 深空。这里刻意向宇宙层调色板靠拢（而不是通用的灰蓝），
+   让「行星内部」的页面和首页/星图看起来是同一个世界。 */
+.dark {
+  --background: #060a18; /* = --cosmic-deep */
+  --surface: #0b1226;
+  --elevated: #101a33;
+  --foreground: #eef2fb; /* = --cosmic-text */
+  --muted: #a7b2cc; /* = --cosmic-muted */
+  --border: #1d2947;
+  --accent: #8fe3ff; /* = --cosmic-ice，全站主强调统一到冰青 */
+  --accent-hover: #b5ecff;
+  --ring: #3a4a75;
+
+  --muted-deep: #7f8aa6;
+  --on-accent: #060a18; /* 深色下 accent 是亮色，实底文字必须反转，否则只有 2.33:1 */
+  --accent-alt: #c9b6ff; /* = --cosmic-violet */
+  --border-focus: #8fe3ff;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+}
+
+/* 缓动曲线：不随主题变化，用非 inline 的 @theme 声明，
+   这样既生成 CSS 变量供 var() 使用，也生成 Tailwind 的 ease-out-soft 工具类。
+   （inline 只把值内联进工具类，不会产出可被 var() 引用的变量。） */
+@theme {
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-ring: var(--ring);
+
+  /* 新增令牌的工具类入口。键名与短名不同名，避免自引用。
+     注意这里用 var(--短名) 而不是内联字面量——内联会绕过暗色覆盖。 */
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  /* 宇宙层颜色（在 cosmic 作用域内恒定，不跟随主题） */
+  --color-cosmic-void: var(--cosmic-void);
+  --color-cosmic-deep: var(--cosmic-deep);
+  --color-cosmic-ice: var(--cosmic-ice);
+  --color-cosmic-violet: var(--cosmic-violet);
+  --color-cosmic-silver: var(--cosmic-silver);
+  --color-cosmic-warm: var(--cosmic-warm);
+  --color-cosmic-text: var(--cosmic-text);
+  --color-cosmic-muted: var(--cosmic-muted);
+  --color-cosmic-line: var(--cosmic-line);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    /* 触屏：去掉 iOS / Android 点击瞬间的灰色高亮块。
+       本站所有可交互元素都有自绘的 hover / focus-visible / active 反馈，
+       系统高亮块在深空底色上既突兀、又会盖住星球本身。 */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 可交互元素：manipulation 关掉「双击缩放」带来的点击延迟，
+     同时保留单指滚动与双指缩放 —— 不会削弱页面缩放这项无障碍能力。 */
+  a,
+  button,
+  [role="button"],
+  summary,
+  label {
+    touch-action: manipulation;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* 键盘导航时给出清晰的 focus 状态。
+     颜色走 --border-focus，与主强调色解耦：将来想单独调焦点色不必动 accent。 */
+  :focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--ring);
+    color: var(--foreground);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   代码高亮（Shiki 双主题）
+   Shiki 会把浅色主题写在行内样式里，并把暗色主题写入 --shiki-dark* 变量，
+   因此暗色模式下需要在这里把变量提升为实际颜色。
+--------------------------------------------------------------------------- */
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* ---------------------------------------------------------------------------
+   文章排版（@tailwindcss/typography 覆盖）
+   直接改写 --tw-prose-* 变量，浅色 / 暗色主题会自动跟随
+--------------------------------------------------------------------------- */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* 目录锚点跳转时不要被顶部导航遮住 */
+.prose :where(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 5.5rem;
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6) .heading-anchor {
+  position: relative;
+  margin-left: 0.4rem;
+  color: var(--muted);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+/* 触控命中区域：锚点本体只有 "#" 的尺寸（约 11×31px），远小于 44×44 的
+   最小推荐值。这里用 ::before 铺一块透明命中区 —— 伪元素同样参与命中测试，
+   又不影响布局与视觉。只向右、向上下扩展：锚点位于标题文字之后，
+   向右是空位，向左扩会盖住正文最后几个字。 */
+.prose .heading-anchor::before {
+  content: "";
+  position: absolute;
+  inset: -0.5rem -2.25rem -0.5rem 0;
+}
+
+/* 可见的 "#" 用伪元素画，不进入标题的文本内容（复制 / 读屏都不受影响） */
+.prose .heading-anchor::after {
+  content: "#";
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6):hover .heading-anchor,
+.prose .heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+/* 行内代码 */
+.prose :not(pre) > code {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.15em 0.4em;
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+  content: none;
+}
+
+/* 代码块 */
+.prose .code-block {
+  position: relative;
+  margin-top: 1.7142857em;
+  margin-bottom: 1.7142857em;
+}
+
+/* 右上角语言标识，内容来自 <div class="code-block" data-language="python"> */
+.prose .code-block[data-language]::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  z-index: 1;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background-color: var(--surface);
+  color: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.prose .code-block > pre {
+  margin-top: 0;
+  margin-bottom: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+  line-height: 1.7;
+}
+
+.prose pre code {
+  background-color: transparent;
+  border: 0;
+  padding: 0;
+  font-weight: 400;
+}
+
+/* 宽表格在移动端横向滚动，避免整页溢出 */
+.prose table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* 图片不溢出 */
+.prose img {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  max-width: 100%;
+  height: auto;
+}
+
+.prose blockquote {
+  font-style: normal;
+  font-weight: 400;
+  border-left-width: 3px;
+  background-color: var(--surface);
+  border-radius: 0 0.5rem 0.5rem 0;
+  padding: 0.25rem 1rem;
+}
+
+.prose blockquote p::before,
+.prose blockquote p::after {
+  content: none;
+}
+
+/* ===========================================================================
+   宇宙层设计系统（Cosmic Portfolio）
+   ---------------------------------------------------------------------------
+   场域划分：
+   - 宇宙层（/ 星海入口、/universe 星图）恒定深空，不跟随 Light / Dark 主题；
+   - 行星内部（blog / projects / resume / diary / goals / about）继续使用上面的
+     主题系统，只叠加宇宙设计语言（分区识别色、返回星图、入场动效）。
+   所有动画只用 transform / opacity，避免触发布局重排。
+=========================================================================== */
+
+/* 宇宙作用域：覆盖主题变量，恒定深空 */
+.cosmic-scope {
+  --background: var(--cosmic-void);
+  --surface: rgba(232, 236, 246, 0.05);
+  --elevated: rgba(232, 236, 246, 0.08);
+  --foreground: var(--cosmic-text);
+  --muted: var(--cosmic-muted);
+  --border: var(--cosmic-line);
+  --accent: var(--cosmic-ice);
+  --accent-hover: #b8eeff;
+  --ring: rgba(143, 227, 255, 0.5);
+
+  position: relative;
+  isolation: isolate;
+  color-scheme: dark;
+  background-color: var(--cosmic-void);
+  color: var(--foreground);
+}
+
+/* body 底色与移动端滚动回弹：
+   .cosmic-scope 在 SSR 输出的 HTML 里就存在（不是 hydration 之后才加），
+   因此不会出现「先白后黑」的闪屏。:has() 不被支持时由 .cosmic-scope 自身兜底。 */
+html:has(.cosmic-scope) {
+  color-scheme: dark;
+}
+
+html:has(.cosmic-scope) body {
+  background-color: var(--cosmic-void);
+}
+
+/* 极淡的星云 / 深空底衬：永远在内容之下，不盖过星点与文字。
+   用 fixed 是因为 /universe 会纵向滚动，absolute 会把渐变拉伸得过淡。 */
+.cosmic-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 112%, rgba(22, 34, 68, 0.6) 0%, transparent 62%),
+    radial-gradient(80% 60% at 78% 10%, rgba(86, 62, 148, 0.2) 0%, transparent 66%),
+    radial-gradient(72% 56% at 10% 24%, rgba(28, 92, 132, 0.18) 0%, transparent 66%);
+}
+
+/* 宇宙层内的焦点态：深空背景下用冰青色更醒目 */
+.cosmic-scope :focus-visible {
+  outline: 2px solid var(--cosmic-ice);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------- 纯 CSS 星球
+   .cosmic-planet 负责球体本体与受光/暗面/边缘光，外层 .cosmic-float 负责漂浮，
+   两者分开是为了让「漂浮动画的 transform」与「hover 缩放的 transform」不互相覆盖。 */
+.cosmic-planet {
+  position: relative;
+  display: block;
+  flex: none;
+  border-radius: 9999px;
+  transition:
+    transform var(--dur-base) var(--ease-out-soft),
+    filter var(--dur-base) var(--ease-out-soft);
+}
+
+.cosmic-planet__body,
+.cosmic-planet__surface,
+.cosmic-planet__shade,
+.cosmic-planet__rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* 表面纹理：重复斜纹在圆内横向平移，形成「球体自转」的错觉（纯 GPU 合成） */
+.cosmic-planet__surface {
+  overflow: hidden;
+  opacity: 0.42;
+  background-image:
+    repeating-linear-gradient(112deg, rgba(255, 255, 255, 0.18) 0 5px, transparent 5px 21px),
+    repeating-linear-gradient(68deg, rgba(2, 4, 10, 0.22) 0 9px, transparent 9px 28px);
+  background-size: 220% 100%;
+  animation: cosmic-spin-surface var(--planet-spin, 30s) linear infinite;
+}
+
+/* 受光面高光 + 暗面内阴影 + 边缘光晕 */
+.cosmic-planet__shade {
+  background: radial-gradient(
+    circle at 30% 26%,
+    rgba(255, 255, 255, 0.2) 0%,
+    transparent 36%
+  );
+  box-shadow:
+    inset -12px -16px 34px rgba(0, 0, 0, 0.72),
+    inset 8px 10px 24px rgba(255, 255, 255, 0.05);
+}
+
+.cosmic-planet__rim {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 0 var(--planet-glow, 34px) -6px var(--planet-accent, var(--cosmic-ice));
+}
+
+/* 光环：压扁的椭圆，随星球一起定位 */
+.cosmic-planet__ring {
+  position: absolute;
+  left: -20%;
+  top: 40%;
+  width: 140%;
+  height: 36%;
+  border-radius: 50%;
+  border: 1px solid rgba(232, 236, 246, 0.26);
+  transform: rotate(-16deg);
+  pointer-events: none;
+}
+
+/* 悬停 / 键盘聚焦（星图里用 .group 包裹）时增强星球：只动 transform 与 filter */
+.group:hover .cosmic-planet,
+.group:focus-visible .cosmic-planet {
+  transform: scale(1.06);
+  filter: brightness(1.14) saturate(1.08);
+}
+
+.group:hover .cosmic-planet__ring,
+.group:focus-visible .cosmic-planet__ring {
+  border-color: var(--planet-accent, var(--cosmic-ice));
+}
+
+/* -------------------------------------------------------------- 通用动效工具 */
+/* 轻微漂浮：速度慢、幅度小，避免持续抖动 */
+.cosmic-float {
+  animation: cosmic-float 9s var(--ease-in-out-soft) infinite;
+}
+
+.cosmic-float--slow {
+  animation-duration: 13s;
+}
+
+/* 页面 / 区块入场：终态即可见态（both），不会造成「内容长期不可读」 */
+.cosmic-enter {
+  animation: cosmic-rise var(--dur-reveal) var(--ease-out-soft) both;
+}
+
+/* 柔和呼吸（用于入口提示与核心辉光） */
+.cosmic-pulse {
+  animation: cosmic-pulse 4.5s var(--ease-in-out-soft) infinite;
+}
+
+/* 星空 / 星图容器：画布永远不拦截交互 */
+.cosmic-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  touch-action: pan-y;
+}
+
+/* 转场遮罩：覆盖整个视口，但永远不拦截交互（pointer-events: none）。
+   即使状态机因为任何意外卡住，用户依然能正常点击与滚动。 */
+.cosmic-transition-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity, transform;
+  background: radial-gradient(
+    circle at var(--origin-x, 50%) var(--origin-y, 50%),
+    rgba(143, 227, 255, 0.32) 0%,
+    rgba(22, 36, 72, 0.94) 34%,
+    var(--cosmic-void) 66%
+  );
+}
+
+/* 穿越变体的缩放原点跟随被点击元素，让「镜头推进」有方向感 */
+.cosmic-transition-overlay[data-variant="warp"] {
+  transform-origin: var(--origin-x, 50%) var(--origin-y, 50%);
+}
+
+/* --------------------------------------------------------------- 关键帧定义 */
+@keyframes cosmic-spin-surface {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -220% 0;
+  }
+}
+
+@keyframes cosmic-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+@keyframes cosmic-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes cosmic-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 转场遮罩：warp（星球穿越，带缩放）与 soft（同体系短版淡入淡出）共用同一套帧 */
+@keyframes cosmic-warp-cover {
+  from {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes cosmic-warp-reveal {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+@keyframes cosmic-fade-cover {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cosmic-fade-reveal {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------- reduced-motion 全局兜底 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 豁免：转场遮罩保留极短的淡入淡出（更高特异性覆盖上面的 * 规则），
+     避免 reduced-motion 用户看到「啪」的一下硬闪。 */
+  .cosmic-transition-overlay,
+  .cosmic-transition-overlay * {
+    animation-duration: var(--dur-instant) !important;
+    transition-duration: var(--dur-instant) !important;
+  }
+}
