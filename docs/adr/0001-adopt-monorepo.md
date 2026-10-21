@@ -71,6 +71,8 @@ loxander-platform/
    - 后果：TypeScript 在两个 workspace 中看到的 Node 全局类型不一致。`apps/desktop` 能用 `@types/node@24` 的 API（如较新的 `fs` 重载、`AbortSignal` 相关类型），搬到 `apps/web` 会报类型错误；反之 `apps/web` 若按 `@types/node@20` 写的代码在 desktop 里可能被更严格的类型拒绝。
    - **必须处理**：P1 建立 `packages/content-core` 时，如果该包同时被两个 app 引用，`@types/node` 版本分歧会让 `packages/*` 的 typecheck 结果取决于从哪个 workspace 解析。建议在 P0 后续步骤统一到 `^24`（desktop 已用 24，web 的 Next 16 也要求 Node 20+，升到 24 兼容），并在根 `package.json` 用 `overrides` 固定。**这条不做，P1 会踩坑。**
 
+   > **补充（2026-10-21 复核）**：当前 `typecheck:desktop` exit 0 **只证明类型层面无冲突，不证明运行时安全**。electron 38.8.6 自身依赖 `@types/node: ^22.7.7`，被根 `overrides` 强制升到 24.19.2 后，`@types/node@24` 暴露了 Node 23/24 才有的 API 面——若 `apps/desktop` 将来用到这些 API，typecheck 会通过但运行时会炸。**若 desktop 出现 electron 相关的运行时异常（而非类型错误），第一怀疑对象是这条 overrides。** 稳妥做法是在解除 ADR 0003 冻结时，一并复核 electron 的 Node 版本与 `@types/node` 是否重新对齐。
+
 2. **其余 14 个共同依赖虽有交集，但声明范围不一致，仍会带来解析不确定性。**
    实测 15 个两边都声明的包中，14 个范围有交集（可提升共用），但**只有 3 个范围写法完全相同**（`gray-matter`、`rehype-slug`、`remark-parse`）。另外 11 个写法不同，例如：
    - `react`：web 是精确版本 `19.3.0`，desktop 是 `^19.0.0`
