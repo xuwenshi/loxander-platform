@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "postinstall": "node scripts/fix-workspace-links.mjs",
     "build": "npm run build:web",
     "build:web": "npm run build -w apps/web",
     "build:desktop": "npm run build -w apps/desktop",

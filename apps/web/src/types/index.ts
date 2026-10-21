@@ -1,13 +1,39 @@
-/** 文章 / 项目等内容类型的统一定义，供 lib 与 UI 共同使用。 */
+/**
+ * 文章 / 项目等内容类型的统一定义，供 lib 与 UI 共同使用。
+ *
+ * P1 起这里不再是「唯一的真相」：
+ * - 能由共享包回答的，一律 re-export，避免站点与桌面端各写一份再慢慢漂移；
+ * - 只保留真正属于站点展示层的字段（slug、计算出的阅读时间、渲染产物等）。
+ *
+ * 对应关系：
+ * - `TocItem` → `@loxander/markdown`（TOC 的 id/text/level 由渲染管线决定，必须与正文同源）
+ * - `ProjectStatus` / `GoalHorizon` / `GoalStatus` / `GoalMilestone` → `@loxander/content-core`
+ *   （共享包的 Zod schema 用它们做枚举校验，类型与运行时取值出自同一处）
+ */
+
+import type {
+  GoalEntry,
+  GoalHorizon,
+  GoalStatus,
+  ProjectStatus,
+} from "@loxander/content-core";
+import type { TocItem } from "@loxander/markdown";
 
 /** 文章目录项（由 Markdown 的 h2 / h3 生成） */
-export type TocItem = {
-  /** 与正文标题 id 一致，用于锚点跳转 */
-  id: string;
-  text: string;
-  /** 2 = h2，3 = h3 */
-  level: number;
-};
+export type { TocItem };
+
+/** 枚举取值：active / in-progress / completed / archived */
+export {
+  PROJECT_STATUSES,
+  type ProjectStatus,
+  GOAL_HORIZONS,
+  type GoalHorizon,
+  GOAL_STATUSES,
+  type GoalStatus,
+} from "@loxander/content-core";
+
+/** 目标里程碑：与 content-core `goalsSchema.milestones` 的元素类型保持一致 */
+export type GoalMilestone = GoalEntry["milestones"][number];
 
 /** 文章元信息（frontmatter + 计算字段） */
 export type PostMeta = {
@@ -34,15 +60,6 @@ export type Post = PostMeta & {
   html: string;
   headings: TocItem[];
 };
-
-export const PROJECT_STATUSES = [
-  "active",
-  "in-progress",
-  "completed",
-  "archived",
-] as const;
-
-export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 /** 项目元信息 */
 export type ProjectMeta = {
@@ -93,17 +110,6 @@ export type DiaryMeta = {
 export type DiaryEntry = DiaryMeta & {
   html: string;
   headings: TocItem[];
-};
-
-export const GOAL_HORIZONS = ["short", "mid", "long"] as const;
-export type GoalHorizon = (typeof GOAL_HORIZONS)[number];
-
-export const GOAL_STATUSES = ["planned", "active", "done", "paused"] as const;
-export type GoalStatus = (typeof GOAL_STATUSES)[number];
-
-export type GoalMilestone = {
-  title: string;
-  done: boolean;
 };
 
 /**

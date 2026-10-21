@@ -2,23 +2,30 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 
-import { extractHeadings, renderMarkdown } from "./markdown";
+import { extractHeadings, renderMarkdown } from "@loxander/markdown";
+
+import { parseOrThrow } from "./parse-entry";
 import type { Post, PostMeta, TagCount } from "@/types";
+
+/**
+ * 文章内容读取（content/blog/*.md）。
+ *
+ * P1 起 frontmatter 校验与 Markdown 渲染都交给共享包：
+ * - `@loxander/content-core`：四类内容共用的 Zod schema（web 与 desktop 同一份契约）
+ * - `@loxander/markdown`：渲染管线（含 Shiki 高亮与 TOC 提取）
+ *
+ * 本文件只保留站点独有的两件事：
+ * - 从本地 SVG 封面读出原始宽高（用于 <img> 预留空间，避免 CLS）
+ * - 估算阅读时间
+ */
 
 const BLOG_DIR = path.join(process.cwd(), "content", "blog");
 
 /** 生产构建时隐藏 draft: true 的文章 */
 const includeDrafts = process.env.NODE_ENV !== "production";
 
-type Frontmatter = {
-  title?: unknown;
-  description?: unknown;
-  date?: unknown;
-  tags?: unknown;
-  category?: unknown;
-  cover?: unknown;
-  draft?: unknown;
-};
+/** cover 约定：以 / 开头、以 .svg 结尾（与 content-core 的引用完整性检查一致） */
+const COVER_PATTERN = /^\/.*\.svg$/;
 
 function listPostFiles(): string[] {
   if (!fs.existsSync(BLOG_DIR)) return [];
@@ -28,25 +35,9 @@ function listPostFiles(): string[] {
     .sort();
 }
 
-/** frontmatter 中的日期可能是字符串，也可能被 YAML 解析成 Date */
-function normalizeDate(value: unknown, file: string): string {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  throw new Error(
-    `[content/blog/${file}] frontmatter 缺少必填字段 "date"（建议写成 "2026-10-08"）`,
-  );
-}
-
-function requireString(value: unknown, field: string, file: string): string {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  throw new Error(
-    `[content/blog/${file}] frontmatter 缺少必填字段 "${field}"`,
-  );
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
+/** 已知的 blog slug，用于校验 projects.article 的引用完整性 */
+export function getBlogSlugs(): string[] {
+  return listPostFiles().map((file) => file.replace(/\.md$/, ""));
 }
 
 /**
@@ -63,7 +54,7 @@ function toStringArray(value: unknown): string[] {
 function readCoverDimensions(
   cover: string | undefined,
 ): { width: number; height: number } | null {
-  if (!cover || !cover.startsWith("/") || !cover.endsWith(".svg")) return null;
+  if (!cover || !COVER_PATTERN.test(cover)) return null;
 
   const filePath = path.join(process.cwd(), "public", cover);
   if (!fs.existsSync(filePath)) return null;
@@ -112,29 +103,28 @@ function parsePostFile(file: string): ParsedPost {
   const slug = file.replace(/\.md$/, "");
   const raw = fs.readFileSync(path.join(BLOG_DIR, file), "utf8");
   const { data, content } = matter(raw);
-  const frontmatter = data as Frontmatter;
 
-  const cover =
-    typeof frontmatter.cover === "string" && frontmatter.cover.trim() !== ""
-      ? frontmatter.cover.trim()
-      : undefined;
-  const coverDimensions = readCoverDimensions(cover);
+  // 校验交给 content-core：字段归一（trim / tags 去重 / 日期双分支）都在那里，
+  // 这里拿到的已经是可直接渲染的强类型对象。
+  const entry = parseOrThrow("blog", data, file, {
+    publicFileExists: (relativePath) =>
+      fs.existsSync(path.join(process.cwd(), "public", relativePath)),
+  });
+
+  const coverDimensions = readCoverDimensions(entry.cover);
 
   const meta: PostMeta = {
     slug,
-    title: requireString(frontmatter.title, "title", file),
-    description: requireString(frontmatter.description, "description", file),
-    date: normalizeDate(frontmatter.date, file),
-    tags: toStringArray(frontmatter.tags),
-    category:
-      typeof frontmatter.category === "string" && frontmatter.category.trim() !== ""
-        ? frontmatter.category.trim()
-        : "未分类",
-    cover,
+    title: entry.title,
+    description: entry.description,
+    date: entry.date,
+    tags: entry.tags,
+    category: entry.category,
+    cover: entry.cover,
     ...(coverDimensions
       ? { coverWidth: coverDimensions.width, coverHeight: coverDimensions.height }
       : {}),
-    draft: frontmatter.draft === true,
+    draft: entry.draft,
     readingTime: estimateReadingTime(content),
   };
 

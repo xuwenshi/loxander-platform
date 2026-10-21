@@ -2,24 +2,20 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 
-import { extractHeadings, renderMarkdown } from "./markdown";
-import { PROJECT_STATUSES, type Project, type ProjectMeta, type ProjectStatus } from "@/types";
+import { extractHeadings, renderMarkdown } from "@loxander/markdown";
+
+import { getBlogSlugs } from "./posts";
+import { parseOrThrow } from "./parse-entry";
+import type { Project, ProjectMeta } from "@/types";
+
+/**
+ * 项目内容读取（content/projects/*.md）。
+ *
+ * P1 起 frontmatter 校验交给 `@loxander/content-core`，
+ * Markdown 渲染交给 `@loxander/markdown` —— 与站点、桌面端同一份实现。
+ */
 
 const PROJECTS_DIR = path.join(process.cwd(), "content", "projects");
-
-type Frontmatter = {
-  name?: unknown;
-  description?: unknown;
-  techStack?: unknown;
-  status?: unknown;
-  period?: unknown;
-  role?: unknown;
-  github?: unknown;
-  demo?: unknown;
-  article?: unknown;
-  featured?: unknown;
-  order?: unknown;
-};
 
 function listProjectFiles(): string[] {
   if (!fs.existsSync(PROJECTS_DIR)) return [];
@@ -27,30 +23,6 @@ function listProjectFiles(): string[] {
     .readdirSync(PROJECTS_DIR)
     .filter((file) => file.endsWith(".md"))
     .sort();
-}
-
-function requireString(value: unknown, field: string, file: string): string {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  throw new Error(`[content/projects/${file}] frontmatter 缺少必填字段 "${field}"`);
-}
-
-function optionalString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  return undefined;
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
-
-function toStatus(value: unknown, file: string): ProjectStatus {
-  if (typeof value === "string" && (PROJECT_STATUSES as readonly string[]).includes(value)) {
-    return value as ProjectStatus;
-  }
-  throw new Error(
-    `[content/projects/${file}] 字段 "status" 必须是 ${PROJECT_STATUSES.join(" / ")} 之一`,
-  );
 }
 
 type ParsedProject = {
@@ -62,21 +34,26 @@ function parseProjectFile(file: string): ParsedProject {
   const slug = file.replace(/\.md$/, "");
   const raw = fs.readFileSync(path.join(PROJECTS_DIR, file), "utf8");
   const { data, content } = matter(raw);
-  const frontmatter = data as Frontmatter;
+
+  // `article` 指向不存在的 blog slug 只产生 warning（页面仍可构建），
+  // 因此这里把已知 slug 列表传进去，由 content-core 决定怎么提示。
+  const entry = parseOrThrow("projects", data, file, {
+    knownBlogSlugs: getBlogSlugs(),
+  });
 
   const meta: ProjectMeta = {
     slug,
-    name: requireString(frontmatter.name, "name", file),
-    description: requireString(frontmatter.description, "description", file),
-    techStack: toStringArray(frontmatter.techStack),
-    status: toStatus(frontmatter.status, file),
-    period: optionalString(frontmatter.period),
-    role: optionalString(frontmatter.role),
-    github: optionalString(frontmatter.github),
-    demo: optionalString(frontmatter.demo),
-    article: optionalString(frontmatter.article),
-    featured: frontmatter.featured === true,
-    order: typeof frontmatter.order === "number" ? frontmatter.order : 999,
+    name: entry.name,
+    description: entry.description,
+    techStack: entry.techStack,
+    status: entry.status,
+    period: entry.period,
+    role: entry.role,
+    github: entry.github,
+    demo: entry.demo,
+    article: entry.article,
+    featured: entry.featured,
+    order: entry.order,
   };
 
   return { meta, body: content };

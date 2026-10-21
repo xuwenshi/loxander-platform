@@ -2,34 +2,27 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 
-import { extractHeadings, renderMarkdown } from "./markdown";
-import {
-  GOAL_HORIZONS,
-  GOAL_STATUSES,
-  type Goal,
-  type GoalHorizon,
-  type GoalMilestone,
-  type GoalStatus,
-} from "@/types";
+import { extractHeadings, renderMarkdown } from "@loxander/markdown";
+
+import { parseOrThrow } from "./parse-entry";
+import type { Goal, GoalMilestone } from "@/types";
 
 /**
  * 目标内容读取（content/goals/*.md）。
  *
  * `progress` 只来自 frontmatter，不做任何推断 —— 仓库内的占位内容全部是 `0`，
  * 表示「还没有填写真实进度」，不是「已完成 0%」的暗示。
+ *
+ * P1 起 frontmatter 校验交给 `@loxander/content-core`，三处行为与旧实现不同
+ * （均为用户裁决过的收紧，见 docs/adr 与 packages/content-core 注释）：
+ * - `progress: 130` 旧实现静默夹取成 100，现在**报错**（让填写错误可见）；
+ *   `progress: 50.6` 仍会 round 成 51，不报错。
+ * - `milestones` 里的坏项旧实现用 `flatMap` **静默丢弃**，现在**整条报错**。
+ * - `order` 旧实现要求 `typeof === "number"`（字符串 `"1"` 退化成 999），
+ *   现在按 desktop 的 `Number()` 语义强转。
  */
 
 const GOALS_DIR = path.join(process.cwd(), "content", "goals");
-
-type Frontmatter = {
-  title?: unknown;
-  horizon?: unknown;
-  status?: unknown;
-  progress?: unknown;
-  period?: unknown;
-  order?: unknown;
-  milestones?: unknown;
-};
 
 function listGoalFiles(): string[] {
   if (!fs.existsSync(GOALS_DIR)) return [];
@@ -37,50 +30,6 @@ function listGoalFiles(): string[] {
     .readdirSync(GOALS_DIR)
     .filter((file) => file.endsWith(".md"))
     .sort();
-}
-
-function requireString(value: unknown, field: string, file: string): string {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  throw new Error(`[content/goals/${file}] frontmatter 缺少必填字段 "${field}"`);
-}
-
-function optionalString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  return undefined;
-}
-
-function toHorizon(value: unknown, file: string): GoalHorizon {
-  if (typeof value === "string" && (GOAL_HORIZONS as readonly string[]).includes(value)) {
-    return value as GoalHorizon;
-  }
-  throw new Error(
-    `[content/goals/${file}] 字段 "horizon" 必须是 ${GOAL_HORIZONS.join(" / ")} 之一`,
-  );
-}
-
-function toStatus(value: unknown, file: string): GoalStatus {
-  if (typeof value === "string" && (GOAL_STATUSES as readonly string[]).includes(value)) {
-    return value as GoalStatus;
-  }
-  throw new Error(
-    `[content/goals/${file}] 字段 "status" 必须是 ${GOAL_STATUSES.join(" / ")} 之一`,
-  );
-}
-
-/** 进度统一夹在 0-100，避免内容里写错数字把进度条画到容器外 */
-function toProgress(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function toMilestones(value: unknown): GoalMilestone[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const record = item as { title?: unknown; done?: unknown };
-    if (typeof record.title !== "string" || record.title.trim() === "") return [];
-    return [{ title: record.title.trim(), done: record.done === true }];
-  });
 }
 
 type ParsedGoal = {
@@ -92,17 +41,23 @@ function parseGoalFile(file: string): ParsedGoal {
   const slug = file.replace(/\.md$/, "");
   const raw = fs.readFileSync(path.join(GOALS_DIR, file), "utf8");
   const { data, content } = matter(raw);
-  const frontmatter = data as Frontmatter;
+
+  const entry = parseOrThrow("goals", data, file);
+
+  const milestones: GoalMilestone[] = entry.milestones.map((milestone) => ({
+    title: milestone.title,
+    done: milestone.done,
+  }));
 
   const meta = {
     slug,
-    title: requireString(frontmatter.title, "title", file),
-    horizon: toHorizon(frontmatter.horizon, file),
-    status: toStatus(frontmatter.status, file),
-    progress: toProgress(frontmatter.progress),
-    period: optionalString(frontmatter.period),
-    order: typeof frontmatter.order === "number" ? frontmatter.order : 999,
-    milestones: toMilestones(frontmatter.milestones),
+    title: entry.title,
+    horizon: entry.horizon,
+    status: entry.status,
+    progress: entry.progress,
+    period: entry.period,
+    order: entry.order,
+    milestones,
   };
 
   return { meta, body: content };

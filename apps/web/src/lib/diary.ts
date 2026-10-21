@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 
-import { extractHeadings, renderMarkdown } from "./markdown";
+import { extractHeadings, renderMarkdown } from "@loxander/markdown";
+
+import { parseOrThrow } from "./parse-entry";
 import type { DiaryEntry, DiaryMeta } from "@/types";
 
 /**
@@ -11,6 +13,10 @@ import type { DiaryEntry, DiaryMeta } from "@/types";
  * 与 posts / projects 保持同一套约定：
  * - 只读取 frontmatter 的函数是同步的（构建期可预测）；
  * - 需要渲染 Markdown 的函数带 `"use cache"`，隔离 Shiki 内部对 `Date.now()` 的读取。
+ *
+ * P1 起 frontmatter 校验交给 `@loxander/content-core`。顺带修掉一处旧缺陷：
+ * 站点原来用 `/^\d{4}-\d{2}-\d{2}/`（**没有 `$`**）校验日期，
+ * `2026-10-12xyz` 也能通过；content-core 的 `zDate` 两端锚定，这类脏值会被拦住。
  */
 
 const DIARY_DIR = path.join(process.cwd(), "content", "diary");
@@ -18,53 +24,12 @@ const DIARY_DIR = path.join(process.cwd(), "content", "diary");
 /** 开发环境显示草稿，生产环境隐藏 */
 const includeDrafts = process.env.NODE_ENV !== "production";
 
-type Frontmatter = {
-  title?: unknown;
-  summary?: unknown;
-  date?: unknown;
-  mood?: unknown;
-  tags?: unknown;
-  draft?: unknown;
-};
-
 function listDiaryFiles(): string[] {
   if (!fs.existsSync(DIARY_DIR)) return [];
   return fs
     .readdirSync(DIARY_DIR)
     .filter((file) => file.endsWith(".md"))
     .sort();
-}
-
-function requireString(value: unknown, field: string, file: string): string {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  throw new Error(`[content/diary/${file}] frontmatter 缺少必填字段 "${field}"`);
-}
-
-function optionalString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.trim() !== "") return value.trim();
-  return undefined;
-}
-
-/** frontmatter 里的日期可能是字符串，也可能被 YAML 解析成 Date（与 posts.ts 同一处理） */
-function normalizeDate(value: unknown, file: string): string {
-  const raw =
-    value instanceof Date
-      ? value.toISOString().slice(0, 10)
-      : typeof value === "string"
-        ? value.trim()
-        : "";
-
-  if (!/^\d{4}-\d{2}-\d{2}/.test(raw)) {
-    throw new Error(
-      `[content/diary/${file}] frontmatter 缺少必填字段 "date"（写成 "2026-10-10" 最稳妥）`,
-    );
-  }
-  return raw;
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
 }
 
 type ParsedDiary = {
@@ -76,18 +41,17 @@ function parseDiaryFile(file: string): ParsedDiary {
   const slug = file.replace(/\.md$/, "");
   const raw = fs.readFileSync(path.join(DIARY_DIR, file), "utf8");
   const { data, content } = matter(raw);
-  const frontmatter = data as Frontmatter;
 
-  const date = normalizeDate(frontmatter.date, file);
+  const entry = parseOrThrow("diary", data, file);
 
   const meta: DiaryMeta = {
     slug,
-    title: requireString(frontmatter.title, "title", file),
-    summary: requireString(frontmatter.summary, "summary", file),
-    date,
-    mood: optionalString(frontmatter.mood),
-    tags: toStringArray(frontmatter.tags),
-    draft: frontmatter.draft === true,
+    title: entry.title,
+    summary: entry.summary,
+    date: entry.date,
+    mood: entry.mood,
+    tags: entry.tags,
+    draft: entry.draft,
   };
 
   return { meta, body: content };
