@@ -3,8 +3,14 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CONTENT_SECTIONS, type ContentSection } from '../schemaService'
 
-/** 测试夹具：直接指向真实博客仓库的 content/（只读，绝不写入） */
-export const CONTENT_ROOT = resolve(fileURLToPath(new URL('../../../../../my-blog/content', import.meta.url)))
+/**
+ * 测试夹具：指向站点的真实 content/（只读，绝不写入）。
+ * P0 导入 monorepo 后内容随站点一起搬到了 apps/web，这里必须跟着走，
+ * 否则测试会去找一个不存在的 apps/my-blog/content 并抛 ENOENT。
+ */
+export const CONTENT_ROOT = resolve(fileURLToPath(new URL('../../../../../web/content', import.meta.url)))
+/** 站点 public/，供封面存在性校验用（content/ 的同级目录） */
+export const PUBLIC_ROOT = resolve(CONTENT_ROOT, '..', 'public')
 
 export interface ContentFile {
   section: ContentSection

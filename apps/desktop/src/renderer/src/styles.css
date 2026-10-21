@@ -788,6 +788,44 @@ button.ghost.block {
   max-width: 100%;
 }
 
+/* ---------------------------------------------------------------------------
+   代码高亮（Shiki 双主题）
+   预览渲染改走 @loxander/markdown 后，代码块开始带 Shiki 高亮：
+   Shiki 把浅色主题写成行内样式，暗色主题写进 --shiki-dark* 变量，
+   所以暗色模式下需要在这里把变量提升为实际颜色。
+   注意本应用的主题开关是 <html data-scheme="light|dark">（不是站点的 .dark 类）。
+--------------------------------------------------------------------------- */
+html[data-scheme='dark'] .markdown-body .shiki,
+html[data-scheme='dark'] .markdown-body .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* 共享管线会把代码块包一层 <div class="code-block" data-language="python">，
+   让语言徽标浮在右上角（与站点保持一致的观感）。 */
+.markdown-body .code-block {
+  position: relative;
+}
+
+.markdown-body .code-block > pre {
+  margin: 0;
+}
+
+.markdown-body .code-block[data-language]::after {
+  content: attr(data-language);
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+}
+
 /* ---------- P2：发布闸门（列模板由 App 的 Tailwind 网格决定） ---------- */
 
 .publish-pane {

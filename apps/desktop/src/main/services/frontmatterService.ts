@@ -1,3 +1,4 @@
+import { dateToISODate } from '@loxander/content-core'
 import matter from 'gray-matter'
 
 /**
@@ -148,14 +149,14 @@ export function topLevelKeys(frontmatterRaw: string): string[] {
 
 /**
  * 把解析值归一为「与文件书写形态无关」的可比较值：
- * - `Date` → `YYYY-MM-DD`（规避时区偏移）
+ * - `Date` → `YYYY-MM-DD`（按本地日历日，避免时区偏移）
  * - 其余保持原样
+ *
+ * 日期归一复用 `@loxander/content-core` 的 `dateToISODate`，与站点 `apps/web`
+ * 的读取路径完全同一份实现 —— 否则两边对同一个 `2026-08-26` 会给出不同结论。
  */
 export function normalizeValue(value: unknown): unknown {
-  if (value instanceof Date) {
-    // 与站点 normalizeDate 对齐：一律取 UTC 前 10 位，避免本地时区导致差一天
-    return value.toISOString().slice(0, 10)
-  }
+  if (value instanceof Date) return dateToISODate(value)
   if (Array.isArray(value)) return value.map((item) => normalizeValue(item))
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {}

@@ -1,3 +1,4 @@
+import { dateToISODate } from '@loxander/content-core'
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { CmsError } from '../errors'
@@ -88,7 +89,9 @@ export function entryFile(workspaceRoot: string, section: ContentSection, slug: 
 }
 
 function toDateString(value: unknown): string | null {
-  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  // 日期归一复用共享包：YAML 里的裸日期会被 gray-matter 解析成 UTC 午夜的 Date，
+  // 这里按本地日历日取前 10 位，避免东八区出现「文件写 08-26、列表显示 08-25」。
+  if (value instanceof Date) return dateToISODate(value)
   if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10)
   return null
 }

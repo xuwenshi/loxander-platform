@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { parseDocument } from '../frontmatterService'
 import { CONTENT_SECTIONS, schemaOf, type ContentSection } from '../schemaService'
 import { assertDeletable, validateFrontmatter } from '../validateService'
-import { CONTENT_ROOT, listContentFiles } from './fixtures'
+import { PUBLIC_ROOT, listContentFiles } from './fixtures'
 
 /**
  * P1 门禁之一：**契约测试全绿**。
@@ -21,7 +21,7 @@ function validate(item: { section: ContentSection; text: string }) {
     doc,
     result: validateFrontmatter(item.section, doc.data, {
       knownBlogSlugs: item.section === 'projects' ? blogSlugs : undefined,
-      publicDirExists: (relPath) => existsSync(join(CONTENT_ROOT, '..', 'public', relPath.replace(/^\//, '')))
+      publicDirExists: (relPath) => existsSync(join(PUBLIC_ROOT, relPath.replace(/^\//, '')))
     })
   }
 }
@@ -79,15 +79,26 @@ describe('frontmatter 契约（真实内容）', () => {
     const badEnum = validateFrontmatter('projects', { name: 'n', description: 'd', status: 'unknown' })
     expect(badEnum.ok).toBe(false)
 
-    const clamped = validateFrontmatter('goals', {
+    // progress 越界：P1 接上 @loxander/content-core 后从「静默夹取到 100 + warning」
+    // 改成了「阻断」。这是有意的收紧 —— 夹取会让表单显示 100 而文件里还是 130。
+    const outOfRange = validateFrontmatter('goals', {
       title: 't',
       horizon: 'long',
       status: 'active',
       progress: 130
     })
-    expect(clamped.ok).toBe(true)
-    expect(clamped.normalized.progress).toBe(100)
-    expect(clamped.warnings[0]?.field).toBe('progress')
+    expect(outOfRange.ok).toBe(false)
+    expect(outOfRange.blocking.map((issue) => issue.field)).toContain('progress')
+
+    // 小数仍然按四舍五入归一（不阻断），这是保留的宽松行为。
+    const rounded = validateFrontmatter('goals', {
+      title: 't',
+      horizon: 'long',
+      status: 'active',
+      progress: 50.6
+    })
+    expect(rounded.ok).toBe(true)
+    expect(rounded.normalized.progress).toBe(51)
   })
 
   it('删除保护：blog/diary/projects 不允许删空，goals 允许', () => {

@@ -1,3 +1,4 @@
+import { parseEntry, type ValidationIssue } from '@loxander/content-core'
 import { CmsError } from '../errors'
 import { normalizeValue } from './frontmatterService'
 import { fieldSpec, schemaOf, type ContentSection, type FieldSpec } from './schemaService'
@@ -7,8 +8,13 @@ import { fieldSpec, schemaOf, type ContentSection, type FieldSpec } from './sche
  * - block：站点构建会失败 / 破坏构建，必须阻断保存或发布；
  * - warn：站点能跑但会静默降级（如封面尺寸优化失效），提示即可。
  *
- * 拆成「单字段校验 + 整表校验」两层：保存路径上只对本次 patch 涉及的字段做单字段校验，
- * 不会把「patch 里没带的必填字段」误判为缺失。
+ * **整表契约不再由本文件定义**：`validateFrontmatter` 直接委托给 `@loxander/content-core`
+ * 的 `parseEntry`，与站点 `apps/web` 用同一份 Zod schema、同一套引用完整性规则。
+ * 这样「契约」全仓库只有一份权威实现，desktop 不再可能出现「CMS 放行但站点构建失败」。
+ *
+ * 本文件保留的是**表单层的部分字段校验**（`validateField` / `validatePatch`）：
+ * patch 只带本次改动的字段，拿不出一份完整文档，因此无法走 `parseEntry`。
+ * 它是保存前的快速反馈，真正的裁决仍在 `validateFrontmatter`。
  */
 
 export interface Issue {
@@ -21,7 +27,7 @@ export interface Issue {
 export interface FieldValidation {
   blocking: Issue[]
   warnings: Issue[]
-  /** 归一/夹取后的值（如 progress 夹到 0–100、Date → YYYY-MM-DD） */
+  /** 归一后的值（如 Date → YYYY-MM-DD） */
   normalized?: unknown
 }
 
@@ -33,7 +39,6 @@ export interface ValidationResult {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-const COVER_RE = /^\/.*\.svg$/
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -44,6 +49,21 @@ export function isPresent(value: unknown): boolean {
   if (value === undefined || value === null) return false
   if (typeof value === 'string' && value.trim() === '') return false
   return true
+}
+
+/**
+ * 把 content-core 的 issue 转成 CMS 的 Issue。
+ *
+ * content-core 的 message 是字段内语义（如「不能为空」），这里补上字段名前缀，
+ * 让渲染层的错误列表能直接读懂；`hint` 原样带过来（content-core 目前只在 warning 上给）。
+ */
+function toIssues(issues: ValidationIssue[]): Issue[] {
+  return issues.map((issue) => ({
+    level: issue.level === 'block' ? 'block' : 'warn',
+    field: issue.field,
+    message: issue.field ? `${issue.field}: ${issue.message}` : issue.message,
+    hint: issue.hint
+  }))
 }
 
 /** 单字段校验：只依据字段自己的 spec 判断，不涉及其它字段 */
@@ -109,17 +129,14 @@ export function validateField(spec: FieldSpec, raw: unknown, present = isPresent
       const min = spec.min ?? Number.NEGATIVE_INFINITY
       const max = spec.max ?? Number.POSITIVE_INFINITY
       if (num < min || num > max) {
-        if (spec.clamp) {
-          const value = Math.min(Math.max(num, min), max)
-          warnings.push({
-            level: 'warn',
-            field: spec.key,
-            message: `${spec.key} 越界（${num}），已自动夹取到 ${value}`,
-            hint: `合法范围 ${min}–${max}`
-          })
-          return { blocking, warnings, normalized: value }
-        }
-        blocking.push({ level: 'block', field: spec.key, message: `${spec.key} 越界：${num}` })
+        // 越界一律阻断，不再自动夹取：与 content-core 的 zProgress 保持一致，
+        // 否则表单里会看到「显示 100 但文件里是 130」这种说谎的界面。
+        blocking.push({
+          level: 'block',
+          field: spec.key,
+          message: `${spec.key} 越界：${num}`,
+          hint: `合法范围 ${spec.min ?? '−∞'}–${spec.max ?? '+∞'}`
+        })
       }
       return { blocking, warnings }
     }
@@ -153,55 +170,32 @@ export function validateField(spec: FieldSpec, raw: unknown, present = isPresent
   }
 }
 
-/** 校验一份完整的 frontmatter 数据（读取/保存/发布前都可用） */
+/**
+ * 校验一份完整的 frontmatter 数据（读取/保存/发布前都可用）。
+ *
+ * 整表契约委托给 `@loxander/content-core` 的 `parseEntry`：四个分区的必填、
+ * 日期格式、枚举取值、tags 归一、progress 范围、milestones 结构、order 兜底，
+ * 以及 cover/article 的引用完整性，全部由共享包裁决。
+ * 本函数只负责把结果翻译成 CMS 的 Issue 形态，并额外补一条 CMS 专有的
+ * 「frontmatter 解析失败」由调用方处理（这里拿不到 dataError）。
+ */
 export function validateFrontmatter(
   section: ContentSection,
   data: Record<string, unknown>,
   options: { knownBlogSlugs?: string[]; publicDirExists?: (relPath: string) => boolean } = {}
 ): ValidationResult {
-  const schema = schemaOf(section)
-  const blocking: Issue[] = []
-  const warnings: Issue[] = []
-  const normalized: Record<string, unknown> = {}
+  const result = parseEntry(section, data, {
+    knownBlogSlugs: options.knownBlogSlugs,
+    // content-core 的 publicFileExists 收到的是站点绝对路径（以 / 开头），
+    // 与 desktop 旧 publicDirExists 的契约一致，直接透传。
+    publicFileExists: options.publicDirExists
+  })
 
-  for (const spec of schema.fields) {
-    const result = validateField(spec, data[spec.key])
-    blocking.push(...result.blocking)
-    warnings.push(...result.warnings)
-    if (result.normalized !== undefined) normalized[spec.key] = result.normalized
-  }
-
-  // 分区特有规则
-  const cover = data.cover
-  if (section === 'blog' && isNonEmptyString(cover)) {
-    if (!COVER_RE.test(cover)) {
-      warnings.push({
-        level: 'warn',
-        field: 'cover',
-        message: `封面路径不符合约定：${cover}`,
-        hint: '应以 / 开头且以 .svg 结尾'
-      })
-    } else if (options.publicDirExists && !options.publicDirExists(cover)) {
-      warnings.push({
-        level: 'warn',
-        field: 'cover',
-        message: `封面文件不存在：${cover}`,
-        hint: '封面尺寸优化会失效，页面仍可构建'
-      })
-    }
-  }
-
-  const article = data.article
-  if (section === 'projects' && isNonEmptyString(article) && options.knownBlogSlugs) {
-    if (!options.knownBlogSlugs.includes(article)) {
-      warnings.push({
-        level: 'warn',
-        field: 'article',
-        message: `article 指向不存在的 blog slug：${article}`,
-        hint: '站点不校验，但项目页的关联链接会失效'
-      })
-    }
-  }
+  const blocking = toIssues(result.blocking)
+  const warnings = toIssues(result.warnings)
+  const normalized: Record<string, unknown> = result.data
+    ? (result.data as unknown as Record<string, unknown>)
+    : {}
 
   return { blocking, warnings, ok: blocking.length === 0, normalized }
 }
