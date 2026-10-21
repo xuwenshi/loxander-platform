@@ -8,10 +8,17 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm run build:web",
+    "build:web": "npm run build -w apps/web",
+    "build:desktop": "npm run build -w apps/desktop",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "typecheck:web": "npm run typecheck -w apps/web",
+    "typecheck:desktop": "npm run typecheck -w apps/desktop",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "overrides": {
+    "@types/node": "^24.0.0"
   },
   "engines": {
     "node": ">=20"
