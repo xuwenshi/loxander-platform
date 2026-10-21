@@ -1,0 +1,19 @@
+{
+  "name": "loxander-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loxander 动态内容平台 monorepo（公开站点、后台、可选桌面端与共享包）",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
