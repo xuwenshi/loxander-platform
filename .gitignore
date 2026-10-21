@@ -23,6 +23,7 @@ coverage/
 
 # 本地缓存与日志
 .npmcache/
+.esbuild-tmp/
 *.log
 npm-debug.log*
 
