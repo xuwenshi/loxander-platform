@@ -7,10 +7,12 @@ import { useState } from "react";
 import {
   CheckCircleIcon,
   CloseIcon,
+  ImageIcon,
   ListIcon,
   MenuIcon,
   FileTextIcon,
   LayersIcon,
+  SettingsIcon,
 } from "@/components/ui/Icons";
 
 import { adminSignOutAction } from "@/lib/admin/actions";
@@ -38,8 +40,10 @@ export interface AdminChromeProps {
 const NAV_ITEMS = [
   { href: "/admin", label: "总览", icon: LayersIcon, exact: true },
   { href: "/admin/content", label: "内容", icon: ListIcon, exact: false },
+  { href: "/admin/media", label: "媒体", icon: ImageIcon, exact: false },
   { href: "/admin/audit", label: "审计日志", icon: CheckCircleIcon, exact: false },
   { href: "/admin/new", label: "新建内容", icon: FileTextIcon, exact: true },
+  { href: "/admin/settings", label: "设置", icon: SettingsIcon, exact: true },
 ] as const;
 
 export function AdminChrome({
