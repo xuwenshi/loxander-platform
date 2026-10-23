@@ -17,7 +17,7 @@
     "typecheck:web": "npm run typecheck -w apps/web",
     "typecheck:desktop": "npm run typecheck -w apps/desktop",
     "test": "npm run db:test && npm run web:test",
-    "web:test": "node --test-isolation=none apps/web/src/lib/__tests__/p3-wiring.test.ts && node --test-isolation=none apps/web/src/lib/sources/__tests__/content-source.test.ts && node --test-isolation=none apps/web/src/lib/admin/__tests__/admin-actions.test.ts",
+    "web:test": "node --test-isolation=none apps/web/src/lib/__tests__/p3-wiring.test.ts && node --test-isolation=none apps/web/src/lib/__tests__/p5-wiring.test.ts && node --test-isolation=none apps/web/src/lib/__tests__/p5-e2e.test.ts && node --test-isolation=none apps/web/src/lib/__tests__/rate-limit-wiring.test.ts && node --test-isolation=none apps/web/src/lib/sources/__tests__/content-source.test.ts && node --test-isolation=none apps/web/src/lib/admin/__tests__/admin-actions.test.ts && node --test-isolation=none apps/web/src/app/api/health/route.test.ts",
     "db:generate": "node db/generate-migration.ts",
     "db:migrate": "node db/migrate.ts",
     "db:migrate:dry": "node db/migrate.ts --dry-run",
@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
+    "@vercel/blob": "^2.8.2",
     "drizzle-orm": "^0.45.4",
     "jsdom": "^30.1.3",
     "next-auth": "^5.0.0-beta.32",
