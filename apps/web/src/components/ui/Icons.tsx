@@ -203,3 +203,63 @@ export function DownloadIcon(props: IconProps) {
     </svg>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* P5 新增（搜索 / 媒体）                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 搜索图标。
+ *
+ * P5 之前的 21 个图标里没有它 —— 因为站内根本没有搜索功能，
+ * 直到 P5 加了 `/search`，导航与搜索框才需要这个图标。
+ */
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+    </svg>
+  );
+}
+
+/** 图片图标（媒体库页与"无封面"占位用）。 */
+export function ImageIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m4 17 4.5-4.5a2 2 0 0 1 2.8 0L20 20" />
+    </svg>
+  );
+}
+
+/** 上传图标（媒体上传按钮用）。 */
+export function UploadIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M12 20V8" />
+      <path d="m7 12 5-5 5 5" />
+      <path d="M5 4h14" />
+    </svg>
+  );
+}
+
+/** 心电图标（健康检查 / 状态指示用）。 */
+export function ActivityIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M3 12h4l2.5-6 4 12L16 12h5" />
+    </svg>
+  );
+}
+
+/** 齿轮图标（后台设置页入口用）。 */
+export function SettingsIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.01a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5.96Z" />
+    </svg>
+  );
+}

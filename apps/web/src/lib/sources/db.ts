@@ -66,6 +66,8 @@ import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 import { entries, entryTags, tags as tagsTable } from "../../../../../db/schema";
 import { entriesTag, entryTag, ALL_ENTRIES_TAG } from "../cache-tags";
 import type { ContentSource } from "../content-source";
+import { searchDocs, type SearchDoc } from "../search";
+import { tagMatches } from "../tag-url";
 import type {
   DiaryEntry,
   DiaryMeta,
@@ -733,6 +735,45 @@ export function createDbContentSource(): ContentSource {
       return [...counter.entries()]
         .map(([category, count]) => ({ tag: category, count }))
         .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag)) satisfies TagCount[];
+    },
+
+    /* ------------------- P5：标签页与服务端搜索 ------------------- */
+
+    /**
+     * 与 `lib/posts.ts` 的 `getPostsByTag` 同口径：走 `tagMatches()` 做大小写不敏感匹配。
+     *
+     * 复用 `getAllPostsCached()` 而不是自己查库，两个理由：
+     * 1. 列表已经是缓存过的，标签页再查一次纯属浪费；
+     * 2. 两路（markdown / db）必须共用**同一份** `PostMeta`，否则标签页在两种
+     *    内容源下会给出不同的排序 —— 那正是 `db:compare` 想防的事。
+     *
+     * 注意这里**不做** slug 归一化：归一化只发生在 URL 边界（`lib/tag-url.ts`），
+     * 传进来的是路由段原文，`tagMatches` 负责剩下的（含 `+` 当空格、畸形编码兜底）。
+     */
+    async getPostsByTag(tag: string) {
+      return (await getAllPostsCached()).filter((post) =>
+        post.tags.some((name) => tagMatches(name, tag)),
+      );
+    },
+
+    /**
+     * 服务端搜索，**刻意不套 `"use cache"`**。
+     *
+     * 方案 §14.2 的缓存策略把「搜索」单列为「动态查询」，这里与之一致：
+     * 同一篇文章被搜到的顺序取决于查询词，缓存键会立刻爆炸；
+     * 而候选集本身只有几十篇，重算成本远低于维护一份正确的缓存失效图。
+     *
+     * 但候选集**仍然来自** `loadRows("blog")`（不是缓存函数）——
+     * 因为 `getAllPostsCached()` 返回的 `PostMeta` 已经把正文裁掉了（`toPostMeta`），
+     * 而搜索要打正文分。少一次缓存命中，换来不用为「正文」再造一份缓存。
+     */
+    async searchPosts(query: string) {
+      const rows = await loadRows("blog");
+      const docs: SearchDoc[] = rows.map((row) => ({
+        ...toPostMeta(row),
+        body: row.body_md,
+      }));
+      return searchDocs(docs, query);
     },
 
     /* ---------------------------- projects ---------------------------- */

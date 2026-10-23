@@ -5,6 +5,8 @@ import matter from "gray-matter";
 import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 
 import { parseOrThrow } from "./parse-entry";
+import type { SearchDoc } from "./search";
+import { tagMatches } from "./tag-url";
 import type { Post, PostMeta, TagCount } from "@/types";
 
 /**
@@ -232,4 +234,47 @@ export function getAllCategories(): TagCount[] {
   return [...counter.entries()]
     .map(([category, count]) => ({ tag: category, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+/* -------------------------------------------------------------------------- */
+/* P5 新增：标签页与服务端搜索                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 某个标签下的全部文章。
+ *
+ * 输入是**路由参数**（`/tags/[tag]` 的原始段），不是标签名原文 ——
+ * 归一化（小写、`+` 当空格、畸形编码兜底）全部交给 `lib/tag-url.ts` 的
+ * `tagMatches()`，这个文件里不再出现第二套规则。
+ *
+ * 匹配口径与 `getAllTags()` 的计数口径**刻意不同**：
+ * - `getAllTags()` 用精确字符串去重（`"RAG"` 与 `"rag"` 是两个标签，如实呈现）；
+ * - 这里大小写不敏感（`/tags/RAG` 与 `/tags/rag` 是同一个页面，URL 才稳定）。
+ *
+ * 两个需求本来就冲突：前者要「如实」，后者要「稳定」。
+ * 解法是把归一化限制在 URL 边界，标签本身的存储与展示仍是原样 ——
+ * 所以 `/tags/rag` 会把带 `"RAG"` 标签的文章也列出来，而标签胶囊上显示的仍是 `"RAG"`。
+ *
+ * 空标签返回 `[]`（不抛错），由页面决定 404 还是空状态。
+ */
+export function getPostsByTag(tag: string): PostMeta[] {
+  return getAllPosts().filter((post) =>
+    post.tags.some((name) => tagMatches(name, tag)),
+  );
+}
+
+/**
+ * 搜索候选全集（含正文原文）。
+ *
+ * 为什么单独一个函数、而不是让 `searchDocs()` 自己调 `getAllPosts()`：
+ * 搜索按「标题 / 标签 / 分类 / 摘要 / 正文」五个字段打分，
+ * 其中只有正文需要**额外读一遍文件**。把读取集中在这里，
+ * 才能让 `sources/db.ts` 用同构方式提供候选（它那边正文就是 `body_md` 列，
+ * 已经在 `loadRows` 的结果里，不需要额外查询）。
+ *
+ * 返回的 `body` 是 frontmatter 之后的 `content`（未渲染、未 trim），
+ * 与 `estimateReadingTime(content)` 用的是同一份输入。
+ */
+export function getSearchDocs(): SearchDoc[] {
+  return readAllParsedPosts().map((post) => ({ ...post.meta, body: post.body }));
 }

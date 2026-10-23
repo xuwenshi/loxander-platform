@@ -371,10 +371,12 @@ test("createEntryAction：落 draft、写版本快照、写审计、写标签、
   assert.equal(audit.rows[0].actorId, authStub.ADMIN_USER_ID, "审计必须记到操作人");
 
   // 缓存标签
+  // P5 起是**四个**：`invalidate()` 额外失效 `tags:index`（标签页的聚合缓存，
+  // 派生自文章列表，任何文章变更都可能改变「有哪些标签 / 每个标签几篇」）。
   assert.deepEqual(
     cacheStub.updatedTags.slice().sort(),
-    ["entries:all", "entries:blog", "entry:blog:hello-platform"].sort(),
-    "三个缓存标签都要失效",
+    ["entries:all", "entries:blog", "entry:blog:hello-platform", "tags:index"].sort(),
+    "四个缓存标签都要失效",
   );
   assert.ok(
     cacheStub.revalidatedPaths.some((item) => item.path === "/admin" && item.type === "layout"),

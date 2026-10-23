@@ -98,9 +98,17 @@ export const siteConfig: SiteConfig = {
     },
   ],
 
+  /*
+    P5：导航里补「标签」「搜索」两项。
+    放在「文章」之后、「项目」之前，因为它们是文章的两种派生入口
+    （按主题聚、按关键词找），不属于新的内容分区。
+    星图上不出现 —— `cosmicSections` 只描述五大行星，这里不碰它。
+  */
   navLinks: [
     { href: "/universe", label: "星图" },
     { href: "/blog", label: "文章" },
+    { href: "/tags", label: "标签" },
+    { href: "/search", label: "搜索" },
     { href: "/projects", label: "项目" },
     { href: "/diary", label: "日记" },
     { href: "/goals", label: "目标" },

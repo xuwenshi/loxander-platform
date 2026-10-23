@@ -165,9 +165,10 @@ test("P3 接线：getAdjacentPosts / getRelatedPosts 返回可用的导航数据
 test("P3 sitemap：async 函数，覆盖全部旧路由且内容来自 ContentSource", async () => {
   const routes = await sitemapModule.default();
 
-  // 8 条静态 + 4 篇 blog + 3 个项目 + 1 篇日记 = 16
-  assert.equal(routes.length, 16, `sitemap 应有 16 条（实际 ${routes.length}）`);
-
+  // P3 基线是 8 条静态 + 4 篇 blog + 3 个项目 + 1 篇日记 = 16。
+  // P5 把标签页也收进 sitemap（`/tags` 总览 + 每个标签一条），所以这里不再断言
+  // 总数 —— 总数随标签数量变化，写死会变成「加一个标签就要改测试」。
+  // 真正要守的是「P3 的 16 条一条都不能少」，所以改成断言子集。
   const urls = routes.map((r) => r.url);
 
   // 8 条静态路由一条都不能少 —— 这是「所有旧 URL 仍然在 sitemap 里」的硬要求。
@@ -182,6 +183,9 @@ test("P3 sitemap：async 函数，覆盖全部旧路由且内容来自 ContentSo
   assert.equal(urls.filter((u) => u.includes("/blog/")).length, 4, "blog 详情应有 4 条");
   assert.equal(urls.filter((u) => u.includes("/projects/")).length, 3, "项目详情应有 3 条");
   assert.equal(urls.filter((u) => u.includes("/diary/")).length, 1, "日记详情应有 1 条");
+
+  // P3 基线 16 条必须全部还在（P5 只许加，不许减）。
+  assert.ok(routes.length >= 16, `sitemap 至少 16 条（实际 ${routes.length}）`);
 
   // 每条都必须有 changeFrequency 与 priority，否则搜索引擎拿到的是半成品。
   for (const route of routes) {

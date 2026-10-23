@@ -21,10 +21,13 @@ import {
   getAllTags,
   getBlogSlugs,
   getPost,
+  getPostsByTag,
   getRecentPosts,
   getRelatedPosts,
+  getSearchDocs,
 } from "../posts";
 import { getAllProjects, getFeaturedProjects, getProject } from "../projects";
+import { searchDocs } from "../search";
 
 /**
  * 创建 markdown 内容源。
@@ -70,6 +73,18 @@ export function createMarkdownContentSource(): ContentSource {
 
     async getAllCategories() {
       return getAllCategories();
+    },
+
+    /* ------------------- P5：标签页与服务端搜索 ------------------- */
+
+    // 归一化与匹配规则在 lib/tag-url.ts，这里只转调，不写第二套。
+    async getPostsByTag(tag: string) {
+      return getPostsByTag(tag);
+    },
+
+    // 打分与排序在 lib/search.ts：这里提供候选（含正文原文），不自己实现匹配。
+    async searchPosts(query: string) {
+      return searchDocs(getSearchDocs(), query);
     },
 
     /* ---------------------------- projects ---------------------------- */

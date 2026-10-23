@@ -21,6 +21,7 @@ import {
   ALL_ENTRIES_TAG,
   entriesTag,
   entryTag,
+  TAGS_INDEX_TAG,
 } from "../cache-tags";
 import { getAdminDb } from "./db";
 import {
@@ -144,6 +145,14 @@ function invalidate(kind: EntryKind, slug: string, previousSlug?: string): void 
   if (previousSlug && previousSlug !== slug) {
     updateTag(entryTag(kind, previousSlug));
   }
+
+  /*
+    P5：标签页的聚合缓存（有哪些标签、每个标签几篇）派生自文章列表，
+    任何文章变更都可能改变它 —— 只改 blog 分区时才需要，
+    因为标签只挂在 blog / diary 上，而标签页只展示 blog 的标签。
+    这里不细分，统一失效：一次 `updateTag` 的成本远低于漏失效的代价。
+  */
+  updateTag(TAGS_INDEX_TAG);
 
   revalidatePath("/admin", "layout");
 }

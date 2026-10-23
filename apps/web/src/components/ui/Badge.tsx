@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { tagHref } from "@/lib/tag-url";
+
 /** 标签样式的小圆角 chip，博客与项目共用 */
 export function Chip({
   children,
@@ -27,11 +29,17 @@ export function TechChip({ children }: { children: ReactNode }) {
   );
 }
 
-/** 可点击的标签（用于标签筛选） */
+/**
+ * 可点击的标签 → 标签页。
+ *
+ * P5 之前 href 硬编码 `/blog`（点了只是回到博客列表，等于没筛选）。
+ * 现在指向 `/tags/<归一化标签>`，URL 由 `tagHref()` 统一生成 ——
+ * 大小写、空格、斜杠的编码规则只在那一个地方，页面与组件不再各写一套。
+ */
 export function TagLink({ tag }: { tag: string }) {
   return (
     <Link
-      href="/blog"
+      href={tagHref(tag)}
       className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-muted transition-colors hover:border-accent/60 hover:text-foreground"
     >
       {tag}

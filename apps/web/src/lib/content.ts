@@ -86,6 +86,31 @@ export async function getAllCategories(): Promise<TagCount[]> {
   return (await getContentSource()).getAllCategories();
 }
 
+/**
+ * 某个标签下的全部文章（P5 新增）。
+ *
+ * 入参是**路由参数原文**（`/tags/[tag]` 的那一段），不是标签名原文。
+ * 归一化（小写、`+` 当空格、畸形编码兜底）由两个实现内部统一走
+ * `lib/tag-url.ts` 的 `tagMatches()` —— 本函数只转发，不做任何清洗，
+ * 否则又会出现第三个实现。
+ */
+export async function getPostsByTag(tag: string): Promise<PostMeta[]> {
+  return (await getContentSource()).getPostsByTag(tag);
+}
+
+/**
+ * 服务端搜索（P5 新增）：**只搜文章、只返回已发布内容**。
+ *
+ * 「只返回已发布」这件事不在本函数里保证，而在两个实现里：
+ * markdown 源的 `readAllParsedPosts()` 本来就过滤草稿，
+ * db 源的 `loadRows("blog")` 在生产环境套 `visibleOnly()`。
+ * 本层不重复过滤 —— 否则草稿过滤规则会有三份，迟早不一致。
+ * 这条边界由 `p5-wiring.test.ts` 的「草稿不进搜索」用例守住。
+ */
+export async function searchPosts(query: string): Promise<PostMeta[]> {
+  return (await getContentSource()).searchPosts(query);
+}
+
 /* -------------------------------------------------------------------------- */
 /* projects                                                                    */
 /* -------------------------------------------------------------------------- */

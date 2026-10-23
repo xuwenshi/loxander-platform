@@ -46,6 +46,24 @@ export function entriesTag(kind: EntryKind): string {
 export const ALL_ENTRIES_TAG = "entries:all";
 
 /**
+ * 标签页（`/tags`、`/tags/[tag]`）与站内搜索（`/search`）的缓存标签（P5 新增）。
+ *
+ * ── 为什么单独一个标签，而不是复用 `entries:blog` ────────────────────
+ * 标签页与搜索页的数据**完全派生自文章列表**，看起来复用 `entries:blog`
+ * 就够了。但它们与列表页有一处关键差异：列表页的缓存内容里只有文章本身，
+ * 而标签页还带着「有哪些标签、每个标签几篇」这份聚合结果。
+ *
+ * 更要紧的是搜索：方案 §14.2 把搜索定成「动态查询」，**不缓存**。
+ * 如果搜索页也打 `entries:blog`，那就会在缓存里出现一份
+ * 「按上次查询词排好序」的结果 —— 下一个查询词进来读到它就是错的。
+ * 所以即使将来给搜索加缓存，也必须用**携带查询词**的独立标签，不能复用分区标签。
+ *
+ * 当前 `/search` 不声明 `"use cache"`（见 `app/(site)/search/page.tsx`），
+ * 这个常量留给将来真要缓存时用，且名字已经表明范围，不会误用。
+ */
+export const TAGS_INDEX_TAG = "tags:index";
+
+/**
  * 一次发布要失效的全部标签。
  *
  * P4 的后台发布流程提交事务后应当遍历这个数组调用
@@ -55,7 +73,10 @@ export const ALL_ENTRIES_TAG = "entries:all";
  * 为什么不直接在这里调用：调用点必须在 Server Action / Route Handler 内，
  * 本文件被 `"use cache"` 作用域 import，放调用会当场抛
  * `createCacheTagOutsideUseCacheError` 同族的错误。
+ *
+ * P5 补上 `TAGS_INDEX_TAG`：发布/归档会改变标签集合与每个标签的篇数，
+ * 所以标签页的聚合缓存必须一起失效。
  */
 export function tagsToRevalidateOnPublish(kind: EntryKind, slug: string): string[] {
-  return [entryTag(kind, slug), entriesTag(kind), ALL_ENTRIES_TAG];
+  return [entryTag(kind, slug), entriesTag(kind), ALL_ENTRIES_TAG, TAGS_INDEX_TAG];
 }

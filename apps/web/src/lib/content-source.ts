@@ -62,6 +62,8 @@ export const CONTENT_SOURCE_KINDS = ["markdown", "db"] as const satisfies readon
  * | `getRelatedPosts`     | `lib/posts.ts:191`             | `(slug, limit = 3): PostMeta[]` |
  * | `getAllTags`          | `lib/posts.ts:210`             | `(): TagCount[]` |
  * | `getAllCategories`    | `lib/posts.ts:225`             | `(): TagCount[]` |
+ * | `getPostsByTag`       | **P5 新增**，无对应旧函数       | `(tag): PostMeta[]` |
+ * | `searchPosts`         | **P5 新增**，无对应旧函数       | `(query): PostMeta[]` |
  * | `getAllProjects`      | `lib/projects.ts:69`           | `(): ProjectMeta[]` |
  * | `getFeaturedProjects` | `lib/projects.ts:74`           | `(limit = 3): ProjectMeta[]` |
  * | `getProject`          | `lib/projects.ts:84`           | `(slug): Promise<Project \| null>` |
@@ -113,6 +115,25 @@ export interface ContentSource {
 
   /** 全部分类及数量，按数量倒序。 */
   getAllCategories(): Promise<TagCount[]>;
+
+  /**
+   * 某个标签下的全部文章（P5 新增），按 `date` 倒序。
+   *
+   * 标签匹配**大小写不敏感**：`/tags/RAG` 与 `/tags/rag` 是同一个页面。
+   * 理由见 `lib/tag-url.ts`：URL 一律小写，而标签名是原样存的（`"RAG"`），
+   * 不归一化的话 `/tags/RAG` 会渲染「暂无内容」，看起来像数据丢了。
+   *
+   * 不存在的标签返回空数组、不抛错 —— 由页面决定渲染 404 还是空状态。
+   */
+  getPostsByTag(tag: string): Promise<PostMeta[]>;
+
+  /**
+   * 服务端搜索（P5 新增）：只搜文章、只返回已发布内容。
+   *
+   * 匹配与排序语义**唯一实现在 `lib/search.ts`**，两个内容源都调它，
+   * 因此不会出现「markdown 源搜得到、db 源搜不到」这类漂移。
+   */
+  searchPosts(query: string): Promise<PostMeta[]>;
 
   /* ---------------------------- projects ---------------------------- */
 

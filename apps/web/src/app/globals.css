@@ -115,11 +115,31 @@
   --color-ring: var(--ring);
 
   /* 新增令牌的工具类入口。键名与短名不同名，避免自引用。
-     注意这里用 var(--短名) 而不是内联字面量——内联会绕过暗色覆盖。 */
+     注意这里用 var(--短名) 而不是内联字面量——内联会绕过暗色覆盖。
+
+     ── `--color-muted-deep` 是 P5 补的（原本漏了，导致 27 处工具类静默失效）──
+     `--muted-deep` 这个短名从 P0 起就在 `:root:30` 与暗色 `:89` 声明了，
+     但此前只被映射成**规范名** `--color-text-muted`（`:44`），
+     而 `@theme inline` 里没有 `--color-muted-deep` 这一项。
+     Tailwind v4 只从 `@theme` 的 `--color-*` 命名空间生成颜色工具类，
+     所以 `text-muted-deep` / `placeholder:text-muted-deep` 这些写法
+     **不报错、也不产出任何 CSS**，视觉效果是「不上色、继承前景色」。
+     实测证据：`.next/static/chunks/*.css`（P5 前的构建产物）里
+     `.text-muted-deep` 命中 0 次，`.text-muted` 命中 1 次。
+     补齐这一行后，既有 27 处用法一次性全部生效，不需要改任何组件。 */
+  --color-muted-deep: var(--muted-deep);
   --color-on-accent: var(--on-accent);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-error: var(--error);
+
+  /* `--color-border-focus` 是 P5 一起补的（同一个漏项的两个受害者）。
+     `--border-focus` 短名一直在（`:root` 浅色 `#1d4ed8`、`.dark` 浅蓝），
+     但此前只被 `@layer base` 的 `:focus-visible { outline: 2px solid var(--border-focus) }`
+     以 `var()` 形式消费，**没有**对应的 `--color-*` 映射。
+     后果同 `muted-deep`：`border-border-focus` 这个类名不报错、不产出 CSS，
+     `/search` 的搜索框聚焦时边框不会变色。 */
+  --color-border-focus: var(--border-focus);
 
   /* 宇宙层颜色（在 cosmic 作用域内恒定，不跟随主题） */
   --color-cosmic-void: var(--cosmic-void);
