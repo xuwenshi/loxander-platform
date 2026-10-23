@@ -12,8 +12,7 @@ import {
   MapPinIcon,
 } from "@/components/ui/Icons";
 import { aboutMeta } from "@/lib/cosmic";
-import { getAllCategories, getAllPosts } from "@/lib/posts";
-import { getAllProjects } from "@/lib/projects";
+import { getAllCategories, getAllPosts, getAllProjects } from "@/lib/content";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -22,10 +21,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "/about" },
 };
 
-export default function AboutPage() {
-  const posts = getAllPosts();
-  const projects = getAllProjects();
-  const categories = getAllCategories();
+export default async function AboutPage() {
+  const [posts, projects, categories] = await Promise.all([
+    getAllPosts(),
+    getAllProjects(),
+    getAllCategories(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16">

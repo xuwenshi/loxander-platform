@@ -11,16 +11,15 @@ import {
   FileTextIcon,
   GithubIcon,
 } from "@/components/ui/Icons";
-import { getAllPosts } from "@/lib/posts";
-import { getAllProjects, getProject } from "@/lib/projects";
+import { getAllPosts, getAllProjects, getProject } from "@/lib/content";
 import { siteConfig } from "@/lib/site";
 
 type ProjectPageProps = {
   params: Promise<{ slug: string }>;
 };
 
-export function generateStaticParams() {
-  return getAllProjects().map((project) => ({ slug: project.slug }));
+export async function generateStaticParams() {
+  return (await getAllProjects()).map((project) => ({ slug: project.slug }));
 }
 
 export async function generateMetadata({
@@ -52,7 +51,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
   // 关联文章：project.article 存的是文章 slug
   const linkedPost = project.article
-    ? (getAllPosts().find((post) => post.slug === project.article) ?? null)
+    ? ((await getAllPosts()).find((post) => post.slug === project.article) ?? null)
     : null;
 
   return (

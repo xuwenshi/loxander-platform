@@ -7,8 +7,7 @@ import StarMap from "@/components/cosmic/StarMap";
 import ProjectCard from "@/components/project/ProjectCard";
 import { ArrowLeftIcon } from "@/components/ui/Icons";
 import SectionHeading, { EmptyState } from "@/components/ui/SectionHeading";
-import { getRecentPosts } from "@/lib/posts";
-import { getFeaturedProjects } from "@/lib/projects";
+import { getFeaturedProjects, getRecentPosts } from "@/lib/content";
 import { siteConfig } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -24,9 +23,11 @@ export const metadata: Metadata = {
  * 页面下方的「本星系最新动态」承载了原首页的精选项目与最新文章，
  * 保证这些内容仍然可以在入口两跳以内到达（内容没有被删除）。
  */
-export default function UniversePage() {
-  const projects = getFeaturedProjects(3);
-  const posts = getRecentPosts(3);
+export default async function UniversePage() {
+  const [projects, posts] = await Promise.all([
+    getFeaturedProjects(3),
+    getRecentPosts(3),
+  ]);
 
   return (
     <div className="relative flex-1">

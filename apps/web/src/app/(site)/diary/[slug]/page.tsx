@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import CosmicLink from "@/components/cosmic/CosmicLink";
 import { Chip } from "@/components/ui/Badge";
 import { ArrowLeftIcon, CalendarIcon } from "@/components/ui/Icons";
-import { getDiaryEntry, getDiarySlugs } from "@/lib/diary";
+import { getDiaryEntry, getDiarySlugs } from "@/lib/content";
 import { formatDate } from "@/lib/format";
 import { siteConfig } from "@/lib/site";
 
@@ -17,8 +17,8 @@ type DiaryEntryPageProps = {
  * 内容目录里始终保留至少一篇占位日记 —— Next 16 的 `generateStaticParams`
  * 不接受空数组。
  */
-export function generateStaticParams() {
-  return getDiarySlugs().map((slug) => ({ slug }));
+export async function generateStaticParams() {
+  return (await getDiarySlugs()).map((slug) => ({ slug }));
 }
 
 export async function generateMetadata({

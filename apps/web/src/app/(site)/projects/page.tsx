@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import SectionIntro from "@/components/cosmic/SectionIntro";
 import ProjectCard from "@/components/project/ProjectCard";
 import { getSection } from "@/lib/cosmic";
-import { getAllProjects } from "@/lib/projects";
+import { getAllProjects } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "项目",
@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/projects" },
 };
 
-export default function ProjectsPage() {
-  const projects = getAllProjects();
+export default async function ProjectsPage() {
+  const projects = await getAllProjects();
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16">

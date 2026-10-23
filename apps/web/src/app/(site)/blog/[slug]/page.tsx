@@ -18,7 +18,7 @@ import {
   getAllPosts,
   getPost,
   getRelatedPosts,
-} from "@/lib/posts";
+} from "@/lib/content";
 import { siteConfig } from "@/lib/site";
 
 type PostPageProps = {
@@ -26,8 +26,8 @@ type PostPageProps = {
 };
 
 /** 构建期枚举全部文章，生成静态页面 */
-export function generateStaticParams() {
-  return getAllPosts().map((post) => ({ slug: post.slug }));
+export async function generateStaticParams() {
+  return (await getAllPosts()).map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({
@@ -64,8 +64,8 @@ export default async function PostPage({ params }: PostPageProps) {
 
   if (!post) notFound();
 
-  const { prev, next } = getAdjacentPosts(slug);
-  const related = getRelatedPosts(slug, 2);
+  const { prev, next } = await getAdjacentPosts(slug);
+  const related = await getRelatedPosts(slug, 2);
 
   const articleStructuredData = {
     "@context": "https://schema.org",

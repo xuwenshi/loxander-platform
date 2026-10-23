@@ -6,7 +6,7 @@ import { Chip } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/SectionHeading";
 import { ArrowRightIcon, CalendarIcon } from "@/components/ui/Icons";
 import { getSection } from "@/lib/cosmic";
-import { getAllDiaryEntries } from "@/lib/diary";
+import { getAllDiaryEntries } from "@/lib/content";
 import { formatDate } from "@/lib/format";
 import { siteConfig } from "@/lib/site";
 
@@ -22,9 +22,9 @@ export const metadata: Metadata = {
  * 结构很简单：一条纵向时间轴，每条记录一行，整行可点。
  * `content/diary/` 里目前是明确标注的占位内容 —— 请替换成你的真实记录。
  */
-export default function DiaryPage() {
+export default async function DiaryPage() {
   const section = getSection("diary");
-  const entries = getAllDiaryEntries();
+  const entries = await getAllDiaryEntries();
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6 sm:py-16">

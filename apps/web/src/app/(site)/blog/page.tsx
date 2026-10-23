@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import PostList from "@/components/blog/PostList";
 import SectionIntro from "@/components/cosmic/SectionIntro";
 import { getSection } from "@/lib/cosmic";
-import { getAllCategories, getAllPosts } from "@/lib/posts";
+import { getAllCategories, getAllPosts } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "博客",
@@ -11,9 +11,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/blog" },
 };
 
-export default function BlogPage() {
-  const posts = getAllPosts();
-  const categories = getAllCategories();
+export default async function BlogPage() {
+  const [posts, categories] = await Promise.all([
+    getAllPosts(),
+    getAllCategories(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16">

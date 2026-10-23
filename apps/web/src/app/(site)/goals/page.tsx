@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import SectionIntro from "@/components/cosmic/SectionIntro";
 import { EmptyState } from "@/components/ui/SectionHeading";
 import { getSection } from "@/lib/cosmic";
-import { getAllGoals } from "@/lib/goals";
+import { getAllGoals } from "@/lib/content";
 import { siteConfig } from "@/lib/site";
 import type { GoalHorizon, GoalStatus } from "@/types";
 
