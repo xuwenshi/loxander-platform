@@ -101,6 +101,17 @@ export const authConfig: NextAuthConfig = {
         // 但 email 与 login 必须拿到（login 用于白名单，email 用于 users.email）。
         params: { scope: "read:user user:email" },
       },
+      // @auth/core 的 normalizeOAuth 对 OAuth provider 默认只开 ["pkce"]
+      // （node_modules/@auth/core/lib/utils/providers.js:52 `const checks = c.checks ?? ["pkce"]`），
+      // 只有配了 redirectProxyUrl 才会自动补 "state"。我们没配代理，
+      // 所以默认情况下 authorize 请求里根本不带 state 参数，回调也不校验 state。
+      //
+      // PKCE 本身已经能挡住"拿别人 code 来换 token"，但 state 是 OAuth 2.0 对
+      // 登录 CSRF 的既定要求，且成本为零：显式打开后回调端会走
+      // o.validateAuthResponse(..., state)（callback/oauth/callback.js:93），
+      // 缺 state 或 state 不匹配一律 fail-closed。线下全往返已验：
+      // 带 state 正常登录，去掉 state 参数则报 `response parameter "state" missing`。
+      checks: ["pkce", "state"],
     }),
   ],
 
