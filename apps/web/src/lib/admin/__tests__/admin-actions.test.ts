@@ -803,3 +803,51 @@ test("创建失败时事务整体回滚：entries / revisions / audit 都不留�
   assert.equal(tagLinks.length, 2, "失败的创建不能留下标签关系");
   void tags;
 });
+
+/* -------------------------------------------------------------------------- */
+/* 13. 登出审计的写入顺序                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 这一条来自一次真实验收。
+ *
+ * P4 收口时往 Neon 里插了一条本地会话打后台全链路，点登出后查 `audit_logs`，
+ * 抓到一行 `action='auth.sign_out', actor_id=null, entity_id=null` —— 审计等于
+ * 没记。根因在 `events.signOut`：`@auth/core/lib/actions/signout.js` 先把
+ * `adapter.deleteSession(sessionToken)` 的返回值塞进 `message.session`，但
+ * `deleteSession` 的契约是 `void`（drizzle adapter 的实现也只 delete 不
+ * returning），所以事件里永远拿不到 userId。
+ *
+ * 修法是「先记录、后登出」，由 `adminSignOutAction` 保证顺序。这个顺序不能在
+ * 代码审查里靠肉眼守，所以在这里断言。
+ */
+test("adminSignOutAction：先写审计、再真正登出（events.signOut 拿不到 userId）", async () => {
+  await createAdminDatabase();
+  authStub.resetSignOutSequence();
+
+  await actions.adminSignOutAction();
+
+  assert.deepEqual(
+    authStub.signOutSequence,
+    [`audit:${authStub.ADMIN_USER_ID}`, "signOut:/login"],
+    "必须先在还有会话时写审计，再调 signOut；顺序反了审计就拿不到操作人",
+  );
+});
+
+test("adminSignOutAction：没有会话时只登出，不写一行全 null 的假审计", async () => {
+  await createAdminDatabase();
+  authStub.resetSignOutSequence();
+  authStub.setCurrentAdmin(null);
+
+  try {
+    await actions.adminSignOutAction();
+  } finally {
+    authStub.setCurrentAdmin({ id: authStub.ADMIN_USER_ID, githubLogin: "tester" });
+  }
+
+  assert.deepEqual(
+    authStub.signOutSequence,
+    ["audit:none", "signOut:/login"],
+    "未登录时 recordSignOutBeforeClearing 不写审计；signOut 仍要执行（清掉可能残留的 cookie）",
+  );
+});

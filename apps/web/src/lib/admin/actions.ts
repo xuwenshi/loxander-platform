@@ -931,8 +931,15 @@ export async function restoreRevisionAction(formData: FormData): Promise<ActionR
 /* 登出                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** 后台登出。走 Auth.js 的 signOut，会真正删掉 sessions 行。 */
+/**
+ * 后台登出。走 Auth.js 的 signOut，会真正删掉 sessions 行。
+ *
+ * **登出前必须先补写审计**：`events.signOut` 拿不到 userId（`deleteSession`
+ * 契约是 `void`，事件里的 `message.session` 恒为 undefined），而等 `signOut()`
+ * 返回时 sessions 行已经没了，再查也查不到。所以顺序是「先记录，再登出」。
+ */
 export async function adminSignOutAction(): Promise<void> {
-  const { signOut } = await import("../auth");
+  const { recordSignOutBeforeClearing, signOut } = await import("../auth");
+  await recordSignOutBeforeClearing();
   await signOut({ redirectTo: "/login" });
 }

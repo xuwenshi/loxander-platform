@@ -45,4 +45,32 @@ export async function getAdminSession(): Promise<{ user: StubAdmin } | null> {
   return currentAdmin ? { user: currentAdmin } : null;
 }
 
+/**
+ * 登出链路的调用序记录。
+ *
+ * ── 这条为什么值得单独测 ──────────────────────────────────────────────
+ * `events.signOut` 拿不到 userId（`@auth/core` 的 `deleteSession` 契约是
+ * `void`，drizzle adapter 也照此实现，事件里的 `message.session` 恒为
+ * `undefined`），所以「登出审计」必须在 `signOut()` **之前**写，否则
+ * sessions 行已经没了、审计也拿不到 actor。
+ *
+ * 这不是靠代码读出来的结论 —— 是 2026-10-23 验收时在 `audit_logs` 里真的
+ * 抓到一行 `action='auth.sign_out', actor_id=null, entity_id=null` 才发现的。
+ * 所以这里把「先记录、后登出」的顺序变成可断言的。
+ */
+export const signOutSequence: string[] = [];
+
+/** 清空调用序，每个用例开头调一次。 */
+export function resetSignOutSequence(): void {
+  signOutSequence.length = 0;
+}
+
+export async function recordSignOutBeforeClearing(): Promise<void> {
+  signOutSequence.push(currentAdmin ? `audit:${currentAdmin.id}` : "audit:none");
+}
+
+export async function signOut(options?: { redirectTo?: string }): Promise<void> {
+  signOutSequence.push(`signOut:${options?.redirectTo ?? ""}`);
+}
+
 export const FORBIDDEN_PATH = "/login?error=AccessDenied";

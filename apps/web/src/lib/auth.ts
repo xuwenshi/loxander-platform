@@ -204,12 +204,32 @@ export const authConfig: NextAuthConfig = {
     },
 
     async signOut(message) {
-      // database 策略下 `message.session` 是**已被删掉的那行 sessions 记录**
-      // （见 `@auth/core/lib/actions/signout.js`：先 adapter.deleteSession 再 emit），
-      // 所以这里能拿到的是 `userId`，不是 `session.user`。
+      // ── 为什么这里拿不到 userId，以及为什么改成「查会话表」─────────────
+      // database 策略下 `@auth/core/lib/actions/signout.js` 的顺序是：
+      //   const session = await options.adapter?.deleteSession(sessionToken);
+      //   await events.signOut?.({ session });
+      // 看起来事件里能拿到会话行 —— 但 **`deleteSession` 的返回值契约是 `void`**
+      // （`@auth/core/adapters.d.ts`），而 `@auth/drizzle-adapter/lib/pg.js` 的实现
+      // 也确实只 `await client.delete(...)`、不 returning，所以 `session` 恒为
+      // `undefined`。之前的写法 `(sessionRow as {userId?})?.userId` 永远取到 null，
+      // 结果是 2026-10-23 验收时在 `audit_logs` 里抓到一行
+      // `action='auth.sign_out', actor_id=null, entity_id=null` —— 审计等于没记。
+      //
+      // 修法：**在 signOut 之前**先自己查一次会话表拿到 userId（见下方
+      // `recordSignOutBeforeClearing`），由 `adminSignOutAction` 调用。
+      // 这里只作为兜底：如果上游将来真的把 session 传进来，就照常用。
       const sessionRow = "session" in message ? message.session : undefined;
       const userId =
         (sessionRow as { userId?: string } | null | undefined)?.userId ?? null;
+      if (!userId) {
+        // 兜底路径也不会写一行全 null 的垃圾审计 —— 那比没有更糟（看着像记录，
+        // 实际无法追责）。改为明确报错，让「没记上」这件事本身可见。
+        console.error(
+          "[auth] signOut 事件拿不到 userId（adapter.deleteSession 无返回值），" +
+            "本条登出未写审计。请确认登出入口调用的是 adminSignOutAction。",
+        );
+        return;
+      }
       await writeAudit({
         actorId: userId,
         action: "auth.sign_out",
@@ -258,6 +278,33 @@ export async function getAdminSession() {
   const session = await auth();
   if (!session?.user?.id) return null;
   return session;
+}
+
+/**
+ * 登出前补写审计。
+ *
+ * ── 为什么需要这个函数 ────────────────────────────────────────────────
+ * `events.signOut` 拿不到 userId：`@auth/core` 的 `deleteSession` 返回值契约
+ * 是 `void`，drizzle adapter 也照此实现，所以事件里的 `message.session` 恒为
+ * `undefined`（详见 `callbacks.signIn` 下方 `signOut` 的注释）。等 `signOut()`
+ * 调用返回时，sessions 行**已经被删了**，再查就查不到。
+ *
+ * 所以必须**在 signOut 之前**把会话取出来。`adminSignOutAction` 负责调用本函数。
+ *
+ * 只写 `auth.sign_out`，且只写一条；拿不到 userId 时什么都不写（宁缺勿造
+ * 一行全 null 的假记录）。
+ */
+export async function recordSignOutBeforeClearing(): Promise<void> {
+  const session = await getAdminSession();
+  const userId = session?.user?.id;
+  if (!userId) return;
+  await writeAudit({
+    actorId: userId,
+    action: "auth.sign_out",
+    entityType: "user",
+    entityId: userId,
+    detail: { githubLogin: session.user.githubLogin ?? null },
+  });
 }
 
 /**
