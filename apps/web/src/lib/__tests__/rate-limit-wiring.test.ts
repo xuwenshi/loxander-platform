@@ -47,6 +47,23 @@ const REPO_DIR = resolvePath(WEB_DIR, "..", "..");
 const SERVER_ONLY_EMPTY = resolvePath(REPO_DIR, "node_modules/server-only/empty.js");
 
 /**
+ * `next/server` 替身（data: URL，不落盘）。
+ *
+ * 两个作用：
+ * 1. **让测试能加载 `route.ts`**。`next` 的 package.json 没有 `exports` 字段，
+ *    纯 node 下 `import("next/server")` 直接 `ERR_MODULE_NOT_FOUND`；
+ *    不替换成替身，整个测试连 import 阶段都过不去。
+ * 2. **让 `connection()` 退化成 no-op**。真实实现在没有请求上下文时会抛
+ *    `` `connection` was called outside a request scope ``（见
+ *    `next/dist/server/request/connection.js:98-101`），
+ *    而在预渲染阶段它会返回一个永远挂住的 Promise。测试里两者都不需要，
+ *    我们关心的是限流逻辑，不是渲染调度。
+ */
+const NEXT_SERVER_STUB_URL = `data:text/javascript,${encodeURIComponent(
+  ["export async function connection() {", "  return undefined;", "}"].join("\n"),
+)}`;
+
+/**
  * `next/headers` 替身（data: URL，不落盘）。
  *
  * 返回 `globalThis.__P5_STUB_HEADERS__`，测试可以随时改写它来模拟不同的
@@ -82,6 +99,10 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { url: pathToFileURL(SERVER_ONLY_EMPTY).href, shortCircuit: true };
+    }
+
+    if (specifier === "next/server") {
+      return { url: NEXT_SERVER_STUB_URL, shortCircuit: true };
     }
 
     if (specifier === "next/headers") {

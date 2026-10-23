@@ -1,3 +1,5 @@
+import { connection } from "next/server";
+
 import { buildHealthReport, healthHttpStatus } from "@/lib/health";
 import type { HealthReport, HealthStatus } from "@/lib/health";
 import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
@@ -16,35 +18,51 @@ import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
  * 里就只能靠人眼审；挪进 lib 之后三条分支（ok / degraded / down）都能被
  * 离线测试逐条断言，route 剩下的部分没有分支，出错空间接近零。
  *
- * ── 为什么加 `export const dynamic = "force-dynamic"` ─────────────────
- * 健康检查必须**每次请求都真查一次库**。而 Route Handler 的 GET 默认是
- * 「可以预渲染的」：Next 在构建期会试着跑一次 handler，若它看起来能在
- * 一个 microtask 内返回，结果就会被当成静态响应缓存下来 —— 那意味着一台
- * 已经连不上库的机器，健康检查还在稳定地报 `ok`。对监控来说这是最坏的
- * 情况：它不会报错，它会安静地绿着。
+ * ── 为什么用 `await connection()` 而不是 `export const dynamic` ────────
+ * 健康检查必须**每次请求都真查一次库**。而 Route Handler 的 GET 在
+ * `cacheComponents` 下和页面同一套模型：**不访问未缓存数据或请求期数据时
+ * 会被预渲染**（`migrating-to-cache-components.md:829`，逐字：
+ * "With Cache Components, `GET` handlers follow the same model as pages:
+ * they prerender when they don't access uncached or runtime data"）。
+ * 一旦被预渲染，一台已经连不上库的机器，健康检查还在稳定地报 `ok` ——
+ * 对监控来说这是最坏的失败模式：它不会报错，它会安静地绿着。
  *
- * 这个项目开了 `cacheComponents: true`，所以必须确认 force-dynamic 在该
- * 模式下合法。实测源码（`node_modules/next/dist/server/route-modules/app-route/module.js`）：
+ * 这里原先写的是 `export const dynamic = "force-dynamic"`，**在 dev 下直接
+ * 报错**（实测 2026-10-23，`GET /api/health` → 500）：
  *
- * - `:172-174`：只有在 `nextConfigOutput === "export"` 时才抛错；本项目没有
- *   `output: export`，所以不会报错。
- * - `:626-634`（`executePrerender` 内的 `switch (prepared.dynamic)`）：`case
- *   "force-dynamic"` 会抛 `DynamicServerError`，于是预渲染阶段直接 bail out，
- *   路由被标记为动态。这正是想要的确定性结果。
+ *   Module build failed ... next-swc-loader.js:
+ *   Error: Route segment config "dynamic" is not compatible with
+ *   `nextConfig.cacheComponents`. Please remove it.
  *
- * 为什么**不用** `await connection()`（`admin/layout.tsx:71-80` 里的既有用法）：
- * `connection()` 声明的是「这棵子树要等到请求到达才渲染」，它解决的是**页面**
- * 在 `cacheComponents` 下的 blocking-prerender 问题；对 Route Handler 而言，
- * force-dynamic 已经提供了「不静态化」的语义，而且更直白。更关键的是
- * `connection()` 依赖请求上下文（`workUnitAsyncStorage`），在离线
- * `node --test` 里直接调 `GET()` 时没有那个上下文，行为不确定 —— 会让本可以
- * 离线验证的东西变成只能靠 build 验证，而 build 在沙箱里跑不了。
+ * 即 `dynamic` 这个 segment config 在 `cacheComponents: true` 下已被禁用，
+ * 不是「不推荐」而是**硬报错**。上一版注释里「源码 `module.js:626-634` 的
+ * force-dynamic 分支会抛 DynamicServerError」那段推断因此作废 —— 那条分支
+ * 在本项目的配置下根本走不到，编译阶段就被拦下了。这是「只靠读源码、没有
+ * 真跑一次」的典型误判，留在这里当教训。
  *
- * 代价：`migrating-to-cache-components.md:136-138` 那段文档建议「移除
- * force-dynamic」，因为该模式下未缓存的数据访问本来就会在请求时执行。
- * 但那个建议的前提是「Next 能看见这次数据访问」—— 它看见的是 `fetch` /
- * cookies / headers 这类被插桩的 API，而 `postgres-js` 的查询对它是完全
- * 不可见的。对一个看不见的 IO，显式声明就是唯一的保险。所以保留。
+ * 正确做法是文档给的那条（`connection.md`「Good to know」+ 迁移指南
+ * `:136-138`）：删掉 segment config，改用运行期信号。`connection()` 的语义
+ * 逐字是「rendering should wait for an incoming user request before
+ * continuing」，实测源码（`node_modules/next/dist/server/request/connection.js`）：
+ * - `:61-66` `case 'prerender' | 'prerender-client' | 'prerender-runtime'`：
+ *   返回 `makeDynamicHangingPromise(...)` —— 预渲染在此处**永远挂住**，
+ *   于是整个路由退出预渲染，被标记为动态。这正是想要的确定性结果。
+ * - `:78-92` `case 'request'`：走 `trackDynamicDataInDynamicRender()` 后
+ *   返回 `asyncApiPromises.connection`（或 dev 下的 devtools promise），
+ *   真实请求下立即 resolve，不增加延迟。
+ *
+ * 为什么不用 `io()`（文档对 cacheComponents 的首选）：`io()` 的语义是
+ * 「接下来有一次 IO，别把它塞进静态壳」，它允许**被缓存**（放在 `use cache`
+ * 里会变成 no-op 并把值固化进静态壳）。健康检查恰恰要「永不被缓存」，
+ * `connection()` 的「等真实请求」才是精确的那个词。
+ *
+ * 代价（必须知道）：`connection()` 依赖请求上下文
+ * （`workUnitAsyncStorage`），离线 `node --test` 里直接调 `GET()` 没有那个
+ * 上下文，`connection.js:98-101` 会走 `throwForMissingRequestStore()` 抛
+ * "`connection` was called outside a request scope"。所以
+ * `route.test.ts` 把 `next/server` 打桩成 `connection: async () => {}`
+ * （见该文件第 2 条打桩说明）。这是**唯一**为了可测性做的让步，
+ * 换来的是「预渲染行为由框架保证」而不是「由我读源码推断」。
  *
  * ── 限流怎么接的，以及两处约定俗成的矛盾怎么调和 ──────────────────────
  * `@/lib/rate-limit` 在这里接上了：健康检查会真的打一次库，被外部高频拉取
@@ -70,9 +88,11 @@ import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
  *    限流」—— 所以它不该复用任何真实密钥，建议单独生成一段随机串。
  * 3. 比较用朴素 `===` 而不是恒定时间比较：这里防的是「忘了配」，不是
  *    时序侧信道。真上恒定时间比较会让人误以为这是个安全边界。
+ *
+ * ── 注意：这里**不能**写 `export const dynamic` ──────────────────────
+ * 它在 `cacheComponents: true` 下是硬报错（不是不推荐），dev 下直接 500。
+ * 详见文件头「为什么用 `await connection()` 而不是 `export const dynamic`」。
  */
-
-export const dynamic = "force-dynamic";
 
 /** 限流窗口：60 秒，与 `lib/rate-limit.ts` 的默认窗口同一量级。 */
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -190,18 +210,29 @@ function toPublicJson(report: HealthReport): {
 let lastReport: HealthReport | null = null;
 
 /*
- * 为什么 `request` 是**可选**参数：
+ * 为什么参数是**必填**的 `Request`（而不是 `request?: Request`）：
  *
- * Next 永远会传 Request 进来，但「健康检查」的核心语义是「此刻服务能不能用」，
- * 与调用方是谁无关。单元测试里大量 `route.GET()` 直接调用，如果签名强制要求
- * Request，那些用例要么全部改成伪造 Request（噪声远大于收益），要么被迫去
- * 断言与本次改动无关的东西。
+ * Next 会为每个 Route Handler 生成类型检查（`.next/dev/types/app/api/health/route.ts`），
+ * 里面把第一个参数约束成 `NextRequest | Request`。写成可选参数会直接编译失败：
  *
- * 省略 Request 时退化成 `new Headers()`：此时 clientKeyFromHeaders() 返回
- * "unknown"，所有无参调用共享同一个桶 —— 这在测试里正是想要的效果（相互隔离
- * 靠 resetRateLimitStore()），而生产路径永远走真实的 Request。
+ *   Type '{ __tag__: "GET"; __param_position__: "first";
+ *          __param_type__: Request | undefined; }'
+ *   does not satisfy the constraint 'ParamCheck<NextRequest | Request>'
+ *
+ * 这个错误只在 `.next` 存在时出现（tsconfig 的 include 里有 `.next/types` 下的生成文件），
+ * 所以「清掉 .next 再跑 tsc 是绿的」是个假象 ——
+ * 真实部署前一定会有 .next。上一版为了「单元测试里能 route.GET()」而写成可选，
+ * 换来的就是这条只在有构建产物时才暴露的错。宁可让测试多传一个 Request。
+ *
+ * 运行时容错仍然保留：`request?.headers ?? new Headers()` 对 `undefined` 也成立，
+ * 所以旧调用方（含任何直接 `route.GET()` 的脚本）不会炸，只是类型层面要求传。
  */
-export async function GET(request?: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  // 必须放在第一行：预渲染阶段这里会永远挂住（见文件头「为什么用 connection()」），
+  // 于是整条路由退出预渲染、被标记为动态。放到限流判断之后也能生效，
+  // 但那样限流器会在构建期被调用一次（往进程内的桶里记一笔），属于无谓的副作用。
+  await connection();
+
   const requestHeaders = request?.headers ?? new Headers();
 
   // 白名单先判：监控系统与攻击者常共享出口 IP，不给自己留门就会把监控限死，

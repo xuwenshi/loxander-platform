@@ -12,7 +12,7 @@
  * 从 `route.ts` 挪进了 `lib/health.ts`，三条分支（ok / degraded / down）才能
  * 在这里被逐条断言，而 `route.ts` 只剩无分支的序列化。
  *
- * ── 两个必须打桩的东西 ────────────────────────────────────────────────
+ * ── 三个必须打桩的东西 ────────────────────────────────────────────────
  * 1. `server-only` → `node_modules/server-only/empty.js`
  *    真实包在非 RSC 环境 import 时直接抛错，纯 node 里加载不了。
  *
@@ -23,6 +23,21 @@
  *    把替身留在测试文件内部，验收标准「只多这四个文件」依然成立。
  *    替身本身不含逻辑，只把调用转发到 `globalThis.__healthAdminDbStub`，
  *    于是每个用例都能自己决定「这次是连上了还是抛错」。
+ *
+ * 3. `next/server` → 虚拟模块，`connection` 退化成 `async () => {}`
+ *    `route.ts` 用 `await connection()` 把路由踢出预渲染（理由见该文件
+ *    文件头）。但 `connection()` 要求请求上下文：实测源码
+ *    `node_modules/next/dist/server/request/connection.js:98-101`，没有
+ *    `workUnitAsyncStorage` 时走 `throwForMissingRequestStore()` 直接抛
+ *    "`connection` was called outside a request scope"。离线 `node --test`
+ *    里直接调 `GET()` 没有那个上下文，所以这里把整个 `next/server` 换掉。
+ *
+ *    为什么不打桩成「返回一个 hang 住的 Promise」：那样每个用例都会超时。
+ *    桩要的语义是「在真实请求里它立即 resolve」这一半 —— 「预渲染会挂住」
+ *    那一半是框架行为，不是本文件该断言的东西（沙箱里也跑不了 build）。
+ *    另外本仓库的 `node_modules/next` 没有 `exports` 映射，纯 node 下
+ *    `import "next/server"` 会 `ERR_MODULE_NOT_FOUND`（实测），所以这个桩
+ *    同时也是让测试能跑起来的前提，不只是为了绕过上下文检查。
  *
  * ── 为什么 registerHooks 必须在所有业务 import 之前 ────────────────────
  * 模块 resolve 发生在 import 的那一刻。先 `import` 再注册钩子，钩子永远
@@ -66,10 +81,24 @@ const ADMIN_DB_STUB_URL =
     ].join("\n"),
   );
 
+const NEXT_SERVER_STUB_URL =
+  "data:text/javascript," +
+  encodeURIComponent(
+    [
+      "export async function connection() {",
+      "  return undefined;",
+      "}",
+    ].join("\n"),
+  );
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
       return { url: pathToFileURL(SERVER_ONLY_EMPTY).href, shortCircuit: true };
+    }
+
+    if (specifier === "next/server") {
+      return { url: NEXT_SERVER_STUB_URL, shortCircuit: true };
     }
 
     // 必须排在通用 `@/` 规则之前，否则它会先被解析成真实文件。
@@ -148,6 +177,24 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
   return (await response.json()) as Record<string, unknown>;
 }
 
+/**
+ * 调一次被测的 `GET`。
+ *
+ * 为什么必须传 `Request`：`route.ts` 的第一个参数是**必填**的。写成可选
+ * （`request?: Request`）会让 Next 生成的类型检查文件
+ * （`.next/dev/types/app/api/health/route.ts`）报 TS2344 ——
+ * `__param_type__: Request | undefined` 不满足 `ParamCheck<NextRequest | Request>`。
+ * 这个错误只在 `.next` 存在时才出现，而部署前一定会有 `.next`，所以不能靠
+ * 「清掉 .next 再跑 tsc」绕过去。
+ *
+ * 这里默认构造一个不带任何 `x-forwarded-for` 的请求：`clientKeyFromHeaders()`
+ * 会返回 `"unknown"`，所有用例共享同一个限流桶 —— 正是想要的隔离方式
+ * （每个用例自己 `resetRateLimitStore()`），需要测 IP 分流时传自定义 headers。
+ */
+function callHealth(headers?: HeadersInit): Promise<Response> {
+  return route.GET(new Request("http://localhost/api/health", { headers }));
+}
+
 /** 保存并恢复一组环境变量，避免用例之间互相污染。 */
 function withEnv<T>(patch: Record<string, string | undefined>, run: () => Promise<T>): Promise<T> {
   const saved = new Map<string, string | undefined>();
@@ -177,7 +224,7 @@ test("健康检查：数据库正常 → database=ok、ok=true、HTTP 200", asyn
   assert.equal(report.database, "ok");
   assert.equal(report.ok, true);
 
-  const response = await route.GET();
+  const response = await callHealth();
   assert.equal(response.status, 200, "正常时必须 200");
 
   const json = await readJson(response);
@@ -197,7 +244,7 @@ test("健康检查：数据库抛错 → database=down、ok=false、HTTP 503", a
   assert.equal(report.database, "down");
   assert.equal(report.ok, false);
 
-  const response = await route.GET();
+  const response = await callHealth();
   assert.equal(response.status, 503, "故障时必须 503，否则监控看不见");
 });
 
@@ -210,7 +257,7 @@ test("健康检查：没配 DATABASE_URL → degraded、ok=true、HTTP 200", asy
   assert.equal(report.database, "degraded");
   assert.equal(report.ok, true);
 
-  const response = await route.GET();
+  const response = await callHealth();
   assert.equal(response.status, 200);
   const json = await readJson(response);
   assert.equal(json.database, "degraded");
@@ -258,7 +305,7 @@ test("健康检查：探活超时 → down（不是无限等待）", async () =>
 test("健康检查：响应 JSON 恰好只有四个字段", async () => {
   installStub({ hasUrl: true });
 
-  const response = await route.GET();
+  const response = await callHealth();
   const json = await readJson(response);
 
   // 逐字对齐方案 §15.2 的契约。多一个字段就可能是泄露：
@@ -280,7 +327,7 @@ test("健康检查：故障时不泄露连接串与错误细节", async () => {
     },
   });
 
-  const response = await route.GET();
+  const response = await callHealth();
   const body = await response.text();
 
   // 方案 §15.2：「不得在响应中泄露连接串或内部错误细节」。
@@ -331,7 +378,7 @@ test("健康检查：timestamp 是合法 ISO 串", async () => {
 
 test("健康检查：Cache-Control 必须防缓存，Retry-After 只在 503 出现", async () => {
   installStub({ hasUrl: true });
-  const ok = await route.GET();
+  const ok = await callHealth();
   assert.match(ok.headers.get("cache-control") ?? "", /no-store/, "成功响应也必须 no-store");
   assert.equal(ok.headers.get("retry-after"), null, "200 不该带 Retry-After");
 
@@ -341,7 +388,7 @@ test("健康检查：Cache-Control 必须防缓存，Retry-After 只在 503 出�
       throw new Error("boom");
     },
   });
-  const down = await route.GET();
+  const down = await callHealth();
   assert.match(
     down.headers.get("cache-control") ?? "",
     /no-store/,
