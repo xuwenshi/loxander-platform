@@ -434,16 +434,20 @@ export function EntryEditor({
               <div className="mt-3 space-y-2">
                 {milestones.map((milestone, index) => (
                   <div key={index} className="flex items-center gap-2">
+                    {/* aria-label 必须带序号：一屏可能有 N 条里程碑，读屏听到的
+                        名字若全同就无法区分（placeholder 不算标签，输入后即消失）。 */}
                     <input
                       name="milestoneTitle"
                       defaultValue={milestone.title}
                       placeholder="里程碑标题"
+                      aria-label={`里程碑 ${index + 1} 标题`}
                       className={`${inputClass} min-w-0 flex-1`}
                     />
                     <input
                       type="checkbox"
                       name="milestoneDone"
                       defaultChecked={milestone.done}
+                      aria-label={`里程碑 ${index + 1} 已完成`}
                       className="h-3.5 w-3.5 shrink-0 accent-[var(--accent)]"
                     />
                     <button

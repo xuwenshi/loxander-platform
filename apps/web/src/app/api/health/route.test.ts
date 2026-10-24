@@ -81,15 +81,36 @@ const ADMIN_DB_STUB_URL =
     ].join("\n"),
   );
 
+/**
+ * 虚拟的 `next/server`。
+ *
+ * 除了把 `connection()` 退化成 `async () => {}`，还要**记下它被调了几次** ——
+ * 否则这条桩就是个哑巴：把 `route.ts` 里的 `await connection()` 删掉，17 条
+ * 断言会全部照绿（P6 闸门矩阵的 H1 变异实测如此）。`connection()` 恰恰是 P5
+ * 收口时那个「`force-dynamic` 与 `cacheComponents` 冲突」缺陷的修复本体，它
+ * 一旦被顺手删掉，路由会重新进入预渲染，而没有任何测试会响。
+ *
+ * 计数放在 `globalThis` 上而不是模块局部变量：桩是 `data:` URL 模块，
+ * 测试文件里拿不到它的作用域。
+ */
 const NEXT_SERVER_STUB_URL =
   "data:text/javascript," +
   encodeURIComponent(
     [
       "export async function connection() {",
+      "  globalThis.__healthConnectionCalls = (globalThis.__healthConnectionCalls ?? 0) + 1;",
       "  return undefined;",
       "}",
     ].join("\n"),
   );
+
+/** 读走并清零 `connection()` 的调用计数。 */
+function takeConnectionCalls(): number {
+  const holder = globalThis as unknown as { __healthConnectionCalls?: number };
+  const calls = holder.__healthConnectionCalls ?? 0;
+  holder.__healthConnectionCalls = 0;
+  return calls;
+}
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -232,6 +253,30 @@ test("健康检查：数据库正常 → database=ok、ok=true、HTTP 200", asyn
   assert.equal(json.ok, true);
 });
 
+/**
+ * P6-I / P1-4：`connection()` 必须真的被调用。
+ *
+ * 这条断言守的不是「返回什么」，而是「有没有调」。`route.ts` 里的
+ * `await connection()` 是「把路由踢出预渲染」的唯一手段（`export const dynamic`
+ * 在 `cacheComponents: true` 下是硬报错，见 P5 收口的缺陷记录）。它被删掉后
+ * 路由仍能编译、仍能返回 200，只是构建期会尝试静态化 —— 离线测试和真实请求
+ * 都看不出差别，只有构建产物能看出，而本机跑不了 build。
+ *
+ * 所以这条是**唯一能在离线环境守住它的东西**。
+ */
+test("健康检查：GET 必须调用 connection() 踢出预渲染（删掉它离线测试会响）", async () => {
+  installStub({ hasUrl: true });
+  takeConnectionCalls(); // 清零，避免前面用例的计数串进来
+
+  await callHealth();
+
+  assert.equal(
+    takeConnectionCalls(),
+    1,
+    "GET 没有调用 connection() —— 路由会重新进入预渲染，`cacheComponents: true` 下这是 P5 那个 500 缺陷的复发",
+  );
+});
+
 test("健康检查：数据库抛错 → database=down、ok=false、HTTP 503", async () => {
   installStub({
     hasUrl: true,
@@ -281,9 +326,19 @@ test("健康检查：没配库时根本不该去建连接", async () => {
   assert.equal(called, false, "没配库时不能尝试取连接");
 });
 
-test("健康检查：探活超时 → down（不是无限等待）", async () => {
+test("健康检查：探活超时 → down，且必须真的重试过一次（不是一次就放弃）", async () => {
   // 探针挂住比返回 503 更糟：监控自己会超时，把「数据库慢」误报成「站点挂了」。
-  // 这里真的等满 3 秒上限 —— 是整套测试里唯一一个慢用例，值得。
+  //
+  // 这条用例同时守两件事，缺一不可：
+  //   下界 5_500ms —— 证明**重试真的发生了**。一次探针 3 秒；P6 期间实测 Neon
+  //     冷启动建连要 4320ms，一次探就判 down 会造成规律性误报，所以
+  //     `checkDatabase()` 在「超时」这一分支上会再探一次。若有人把重试删掉，
+  //     耗时立刻掉到约 3 秒 —— 而只写上界（`< 10_000`）的话断言照样通过，
+  //     这就是 P6 闸门矩阵里 H2 那条空转（6135ms → 3116ms 仍全绿）。
+  //   上界 10_000ms —— 证明没有无限等下去。
+  //
+  // 区间取 [5_500, 10_000)：两次 3 秒探针的理论值是 6000ms，留 500ms 给调度抖动；
+  // 上界留 4 秒余量是因为这台机器在跑 dev server 时计时会明显变慢。
   installStub({
     hasUrl: true,
     getAdminDb: async () => ({ execute: () => new Promise<unknown>(() => {}) }),
@@ -294,7 +349,10 @@ test("健康检查：探活超时 → down（不是无限等待）", async () =>
   const elapsed = Date.now() - startedAt;
 
   assert.equal(status, "down");
-  assert.ok(elapsed >= 2_900, `应在约 3 秒后放弃（实际 ${elapsed}ms）`);
+  assert.ok(
+    elapsed >= 5_500,
+    `耗时 ${elapsed}ms 太短 —— 只探了一次就放弃，冷启动的库会被误报成 down（应有两次 3 秒探针）`,
+  );
   assert.ok(elapsed < 10_000, `不能真的等下去（实际 ${elapsed}ms）`);
 });
 

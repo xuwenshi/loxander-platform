@@ -77,11 +77,13 @@ process.chdir(WEB_DIR);
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const search = await import("../search");
 const tagUrl = await import("../tag-url");
 const content = await import("../content");
 const posts = await import("../posts");
+const cacheTags = await import("../cache-tags");
 const sitemapModule = await import("../../app/sitemap");
 
 /* -------------------------------------------------------------------------- */
@@ -373,5 +375,235 @@ test("P5 sitemap：/tags 在 sitemap 里，/search 不在", async () => {
     new Set(lowered).size,
     lowered.length,
     "sitemap 里出现了只差大小写的重复标签 URL",
+  );
+});
+
+/* -------------------------------------------------------------------------- */
+/* 5. 缓存标签：读路径声明的标签，必须能被写路径失效掉                          */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * ── 为什么需要这一组（P6-I / P0-1）────────────────────────────────────────
+ * P6 的闸门矩阵报告指出：`sources/db.ts` 里有 7 处 `cacheTag()`，
+ * 而 `next-cache-stub.ts` 早就导出了 `recordedTags` 记录器 —— **却没有任何
+ * 测试引用过它**。也就是说：
+ *
+ *   · 写路径失效了哪些标签（`admin-actions.test.ts` 用 `updatedTags` 断言）；
+ *   · 读路径声明了哪些标签（**完全没人验**）。
+ *
+ * 两边对不上时，症状是「发布之后前台纹丝不动」，而所有测试全绿 ——
+ * 这是本项目里最贵的一类缺陷（P3 的 `use cache` 跨作用域 500 就是同族）。
+ *
+ * 所以这里做**双向对账**：把 db.ts 里每个 `"use cache"` 函数声明的标签
+ * 抽出来，逐一验证它属于 `tagsToRevalidateOnPublish(kind, slug)` 的返回值。
+ * 这样无论哪边被改坏，这条都会红。
+ */
+
+/** `apps/web/src/lib/sources/db.ts` 的绝对路径。 */
+const DB_SOURCE_ABS = resolvePath(SRC_DIR, "lib/sources/db.ts");
+
+/**
+ * 从 `source` 里取出所有 `"use cache"` 函数：函数名 + 函数体文本。
+ *
+ * 用**括号配对**定位函数体，不用正则按行尾收尾 —— 理由见
+ * `a11y-audit.test.ts` 的 `extractDeclBody()` 注释：正则收尾会被 CRLF、
+ * 缩进、剥注释后的空行反复坑到，而括号配对与这些全部无关。
+ */
+function collectUseCacheFunctions(source: string): { name: string; body: string }[] {
+  const out: { name: string; body: string }[] = [];
+  const declRe = /(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = declRe.exec(source)) !== null) {
+    const name = match[1];
+    // 从参数括号开始数配对，找到函数体闭合处。
+    let depth = 0;
+    let bodyStart = -1;
+    let end = -1;
+    for (let i = match.index + match[0].length - 1; i < source.length; i += 1) {
+      const ch = source[i];
+      if (ch === "(" || ch === "[" || ch === "{") {
+        if (ch === "{" && depth === 0) bodyStart = i;
+        depth += 1;
+        continue;
+      }
+      if (ch === ")" || ch === "]" || ch === "}") {
+        depth -= 1;
+        if (depth === 0 && ch === "}") {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (bodyStart === -1 || end === -1) continue;
+
+    const body = source.slice(bodyStart, end);
+    // 指令必须是函数体**第一行**才叫 `"use cache"`（写在中间不生效）。
+    if (/^\{\s*(?:\r?\n)?\s*"use cache"\s*;/.test(body)) {
+      out.push({ name, body });
+    }
+  }
+
+  return out;
+}
+
+/**
+ * 取一段函数体里 `cacheTag(...)` 的实参文本（可能多次调用，合并返回）。
+ *
+ * 逗号必须**按顶层切**：`cacheTag(entryTag("blog", slug))` 里 `entryTag` 自己
+ * 也有一个逗号，朴素 `split(",")` 会把它拆成 `entryTag("blog"` 和 `slug` 两段
+ * （第一版就是这么写的，被本测试自己抓出来）。所以数括号深度，只在深度 0 处切。
+ */
+function cacheTagArgs(body: string): string[] {
+  const args: string[] = [];
+  const callRe = /cacheTag\(([\s\S]*?)\)\s*;/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = callRe.exec(body)) !== null) {
+    const inner = match[1];
+    let depth = 0;
+    let current = "";
+
+    for (const ch of inner) {
+      if (ch === "(" || ch === "[" || ch === "{") depth += 1;
+      if (ch === ")" || ch === "]" || ch === "}") depth -= 1;
+      if (ch === "," && depth === 0) {
+        const trimmed = current.trim();
+        if (trimmed.length > 0) args.push(trimmed);
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+
+    const tail = current.trim();
+    if (tail.length > 0) args.push(tail);
+  }
+
+  return args;
+}
+
+test("缓存标签：db.ts 里恰好有 7 个 `\"use cache\"` 函数，且每个都声明了 cacheTag", () => {
+  const source = readFileSync(DB_SOURCE_ABS, "utf8");
+  const functions = collectUseCacheFunctions(source);
+
+  // 钉死数量：新增/删除 `"use cache"` 函数必须回来改这里，
+  // 否则「新加了一个缓存函数却忘了打标签」会静默通过。
+  assert.deepEqual(
+    functions.map((fn) => fn.name).sort(),
+    [
+      "getAllDiaryCached",
+      "getAllGoalsCached",
+      "getAllPostsCached",
+      "getAllProjectsCached",
+      "getDiaryEntryDetail",
+      "getPostDetail",
+      "getProjectDetail",
+    ],
+    "`\"use cache\"` 函数集合变了 —— 新增的缓存函数必须同时声明 cacheTag，并回来更新这条断言",
+  );
+
+  for (const fn of functions) {
+    assert.ok(
+      cacheTagArgs(fn.body).length > 0,
+      `${fn.name} 带 \`"use cache"\` 却没有 cacheTag() —— 它的缓存永远打不掉（发布后前台不刷新）`,
+    );
+  }
+});
+
+test("缓存标签：读路径声明的每个标签，都能被写路径的失效清单覆盖", () => {
+  const source = readFileSync(DB_SOURCE_ABS, "utf8");
+  const functions = collectUseCacheFunctions(source);
+
+  // 详情路径：`cacheTag(entryTag(kind, slug))`
+  //
+  // 用 `as const` 而不是 `{ fn: string; kind: string }[]`：`kind` 会被喂给
+  // `tagsToRevalidateOnPublish(kind, slug)`，那个签名收的是 `EntryKind`
+  // （四个字面量的联合）。写成 `string` 会让 tsc 报 TS2345 —— 而这条测试
+  // 存在的意义正是「kind 必须是那四个之一」，用宽类型等于把校验让掉了。
+  const detailCases = [
+    { fn: "getPostDetail", kind: "blog" },
+    { fn: "getProjectDetail", kind: "projects" },
+    { fn: "getDiaryEntryDetail", kind: "diary" },
+  ] as const;
+  // 列表路径：`cacheTag(entriesTag(kind), ALL_ENTRIES_TAG)`
+  const listCases = [
+    { fn: "getAllPostsCached", kind: "blog" },
+    { fn: "getAllProjectsCached", kind: "projects" },
+    { fn: "getAllDiaryCached", kind: "diary" },
+    { fn: "getAllGoalsCached", kind: "goals" },
+  ] as const;
+
+  const byName = new Map(functions.map((fn) => [fn.name, fn.body]));
+  const sampleSlug = "sample-slug";
+
+  for (const { fn, kind } of detailCases) {
+    const body = byName.get(fn);
+    assert.ok(body !== undefined, `找不到 ${fn}`);
+
+    const args = cacheTagArgs(body);
+    assert.deepEqual(
+      args,
+      [`entryTag("${kind}", slug)`],
+      `${fn} 的 cacheTag 实参必须是 entryTag("${kind}", slug)，实际 ${JSON.stringify(args)}`,
+    );
+
+    // 双向对账：写路径发布这个 kind 的任意一篇时，必须失效这个详情标签。
+    const invalidated = cacheTags.tagsToRevalidateOnPublish(kind, sampleSlug);
+    assert.ok(
+      invalidated.includes(cacheTags.entryTag(kind, sampleSlug)),
+      `发布 ${kind} 时没有失效 ${fn} 声明的 entryTag("${kind}", slug) —— 发布后详情页不会刷新`,
+    );
+  }
+
+  for (const { fn, kind } of listCases) {
+    const body = byName.get(fn);
+    assert.ok(body !== undefined, `找不到 ${fn}`);
+
+    const args = cacheTagArgs(body);
+    assert.deepEqual(
+      args,
+      [`entriesTag("${kind}")`, "ALL_ENTRIES_TAG"],
+      `${fn} 的 cacheTag 实参必须是 entriesTag("${kind}") + ALL_ENTRIES_TAG，实际 ${JSON.stringify(args)}`,
+    );
+
+    const invalidated = cacheTags.tagsToRevalidateOnPublish(kind, sampleSlug);
+    assert.ok(
+      invalidated.includes(cacheTags.entriesTag(kind)),
+      `发布 ${kind} 时没有失效 ${fn} 声明的 entriesTag("${kind}") —— 发布后列表页不会刷新`,
+    );
+    assert.ok(
+      invalidated.includes(cacheTags.ALL_ENTRIES_TAG),
+      `发布 ${kind} 时没有失效 ${fn} 声明的 ALL_ENTRIES_TAG —— sitemap / 跨类型列表不会刷新`,
+    );
+  }
+});
+
+test("缓存标签：tagsToRevalidateOnPublish 覆盖全部四个分区，且与常量同源", () => {
+  const kinds = ["blog", "diary", "projects", "goals"] as const;
+
+  for (const kind of kinds) {
+    const tags = cacheTags.tagsToRevalidateOnPublish(kind, "x");
+    assert.deepEqual(
+      tags,
+      [
+        cacheTags.entryTag(kind, "x"),
+        cacheTags.entriesTag(kind),
+        cacheTags.ALL_ENTRIES_TAG,
+        cacheTags.TAGS_INDEX_TAG,
+      ],
+      `${kind} 的失效清单必须恰好这 4 个标签（顺序固定，便于对账）`,
+    );
+  }
+
+  // 三个常量必须是不同字符串，否则「失效 A 顺带失效 B」这种巧合会让缺陷藏起来。
+  assert.equal(
+    new Set([cacheTags.ALL_ENTRIES_TAG, cacheTags.TAGS_INDEX_TAG]).size,
+    2,
+    "ALL_ENTRIES_TAG 与 TAGS_INDEX_TAG 不能是同一个字符串",
+  );
+  assert.ok(
+    cacheTags.ALL_ENTRIES_TAG !== cacheTags.entriesTag("blog"),
+    "ALL_ENTRIES_TAG 不能与某个分区标签重名",
   );
 });

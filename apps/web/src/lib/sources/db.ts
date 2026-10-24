@@ -92,8 +92,36 @@ interface Connection {
   close: () => Promise<void>;
 }
 
-/** 进程内单例：读路径高频调用，不能每次查询都新建连接。 */
-let cachedConnection: Promise<Connection> | undefined;
+/**
+ * 已建好的连接实例。
+ *
+ * ── 为什么存「实例」而不是「Promise」──────────────────────────────
+ * 这里曾经是 `let cachedConnection: Promise<Connection> | undefined`，
+ * 用 `cachedConnection ??= (async () => ...)()` 做「进程内只建一次」的去重。
+ * 那个写法在 P6 的真实 HTTP 验收里直接把 `/blog` 与 `/about` 打成 500：
+ *
+ *   Error: Route "/blog": A `"use cache"` function is awaiting a promise
+ *   created outside it. The same call completed when run in isolation, so a
+ *   module-scoped value (often a top-level `Map` used to dedupe fetches) is
+ *   most likely blocking it. `"use cache"` already dedupes calls with the
+ *   same arguments. Remove the surrounding dedupe layer.
+ *     at getAllPostsCached (src/lib/sources/db.ts)
+ *
+ * 机制：第一个进缓存作用域的请求建了这个模块级 Promise；第二个请求在
+ * **另一个**缓存作用域里 `await` 它 —— Next 认为这是「跨作用域复用未完成的值」，
+ * 因为那个 Promise 的完成时机不受当前作用域控制，缓存快照可能拿到半成品。
+ * 于是它选择直接报错而不是静默缓存一个不完整的值。
+ *
+ * 改成「只缓存**已解析**的实例」后，跨作用域传的是普通对象，不再有这个问题；
+ * 唯一代价是「进程启动时若有两个请求同时首达」会各建一条连接，
+ * 后到的那条立刻关掉（见 `getDb()`）—— 一次性成本，换来正确性。
+ *
+ * 这条约束适用于整个文件：**任何 `"use cache"` 函数内都不得 await
+ * 模块作用域创建的 Promise**。将来若要加别的单例（比如限流器），
+ * 同样只能缓存实例。
+ */
+let cachedDb: Db | undefined;
+let cachedClose: (() => Promise<void>) | undefined;
 
 /**
  * 外部注入的 drizzle 实例。
@@ -111,45 +139,64 @@ export function setDbContentSourceDatabase(db: Db | undefined): void {
 }
 
 /**
+ * 建一条新连接。**返回的 Promise 由调用方在自己作用域内创建**。
+ *
+ * 仍用动态 `import()`，与 `lib/content-source.ts` 保持同一策略：
+ * 只有真的走 db 源时，`postgres` / `drizzle-orm` 才进入模块图。
+ * 这两次 import 也必须在调用方作用域里发生 —— 不能提到模块顶层
+ * 挂成 Promise（理由见 `cachedDb` 的注释）。
+ */
+async function createConnection(): Promise<Connection> {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "[content-source/db] 缺少 DATABASE_URL。CONTENT_SOURCE=db 时必须提供 Postgres 连接串" +
+        "（本地可先用 `node db/import.ts --dry-run` 检查映射结果）。",
+    );
+  }
+
+  const { default: postgres } = await import("postgres");
+  const { drizzle } = await import("drizzle-orm/postgres-js");
+
+  // max 保持保守：Next 的冷启动实例多，池子开大容易打满 Postgres 连接数上限。
+  const client = postgres(url, { max: 5, onnotice: () => {} });
+
+  return {
+    db: drizzle(client) as Db,
+    close: () => client.end({ timeout: 5 }),
+  };
+}
+
+/**
  * 取数据库连接（惰性、单例）。
  *
- * 用动态 `import()` 与 `lib/content-source.ts:160` 保持同一策略：
- * 只有真的走 db 源时，`postgres` / `drizzle-orm` 才进入模块图。
+ * 只在**还没连过**时才真的建连，且建连的 Promise 是本次调用自己创建的
+ * （不是模块作用域里预先挂着的），所以放进 `"use cache"` 作用域是安全的。
+ * 连上之后 `cachedDb` 是普通对象，后续调用连 Promise 都不产生。
  */
 async function getDb(): Promise<Db> {
   if (injectedDb) return injectedDb;
+  if (cachedDb) return cachedDb;
 
-  cachedConnection ??= (async () => {
-    const url = process.env.DATABASE_URL;
-    if (!url) {
-      throw new Error(
-        "[content-source/db] 缺少 DATABASE_URL。CONTENT_SOURCE=db 时必须提供 Postgres 连接串" +
-          "（本地可先用 `node db/import.ts --dry-run` 检查映射结果）。",
-      );
-    }
+  const created = await createConnection();
 
-    const { default: postgres } = await import("postgres");
-    const { drizzle } = await import("drizzle-orm/postgres-js");
+  // 并发首达：别人先装上了就关掉自己这条，避免池子泄漏。
+  if (cachedDb) {
+    await created.close().catch(() => undefined);
+    return cachedDb;
+  }
 
-    // max 保持保守：Next 的冷启动实例多，池子开大容易打满 Postgres 连接数上限。
-    const client = postgres(url, { max: 5, onnotice: () => {} });
-
-    return {
-      db: drizzle(client) as Db,
-      close: () => client.end({ timeout: 5 }),
-    };
-  })();
-
-  return (await cachedConnection).db;
+  cachedDb = created.db;
+  cachedClose = created.close;
+  return cachedDb;
 }
 
 /** 清空连接缓存（测试 / 热重载用）。 */
 export async function closeDbContentSourceConnection(): Promise<void> {
-  if (!cachedConnection) return;
-  const pending = cachedConnection;
-  cachedConnection = undefined;
-  const connection = await pending.catch(() => undefined);
-  await connection?.close().catch(() => undefined);
+  const close = cachedClose;
+  cachedDb = undefined;
+  cachedClose = undefined;
+  await close?.().catch(() => undefined);
 }
 
 /* -------------------------------------------------------------------------- */

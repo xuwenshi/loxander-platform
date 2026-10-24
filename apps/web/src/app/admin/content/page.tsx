@@ -203,11 +203,15 @@ function FilterBar({
         </label>
 
         <div className="block">
+          {/* 这里的「排序」用 span 而不是 label（列对齐需要 block 包裹），
+              所以下拉必须自带 aria-label，否则读屏只念「组合框」。
+              与相邻的「排序方向」（aria-label="排序方向"）对齐。 */}
           <span className="mb-1 block text-xs font-medium text-muted">排序</span>
           <div className="flex gap-2">
             <select
               name="sort"
               defaultValue={current.sort}
+              aria-label="排序"
               className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
             >
               {SORT_OPTIONS.map((option) => (

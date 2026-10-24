@@ -37,14 +37,51 @@ export interface HealthReport {
 }
 
 /**
- * 探活超时上限（毫秒）。
+ * 单次探活的超时上限（毫秒）。
  *
  * 为什么必须有超时：`postgres-js` 建连失败时可能卡在 TCP 握手 / TLS 协商上
  * 几十秒，而健康检查是被监控系统按固定间隔拉的 —— 一个挂住不返回的探针
  * 比返回 503 更糟，它会让监控自己超时、把「数据库慢」误报成「站点挂了」。
- * 3 秒是常见的探针超时档位，也远大于一次 `select 1` 的正常耗时（通常 <10ms）。
+ * 3 秒是常见的探针超时档位，也远大于一次 `select 1` 的正常耗时（热连接 230–290ms）。
  */
 const PROBE_TIMEOUT_MS = 3_000;
+
+/**
+ * 第一次超时后再给一次机会的上限（毫秒）。
+ *
+ * ── 这条重试是实测逼出来的，不是防御性编程 ──────────────────────────────
+ * Neon 免费档的计算实例会休眠，冷启动要**重新建立 TCP + TLS + 唤醒实例**。
+ * 本机实测（`.tmp-neon-latency.mjs`，2026-10-24）：
+ *
+ * ```
+ * cold connect+select1 = 4320 ms
+ * warm select1 #0      =  815 ms
+ * warm select1 #1      =  228 ms
+ * warm select1 #2      =  286 ms
+ * ```
+ *
+ * 冷启动 4320ms > 3000ms 超时 → **第一次探活必然报 `down`**，于是每次
+ * 「实例睡了一会儿之后的第一条监控请求」都会亮红灯。这不是数据库故障，
+ * 是探针自己的问题 —— 一个会规律性误报的健康检查，等于没有健康检查。
+ *
+ * 为什么重试有效（实测 `.tmp-neon-retry.mjs`）：
+ *
+ * ```
+ * { label: 'first(3000ms)',  outcome: 'timeout', elapsed: 3005 }
+ * { label: 'second(3000ms)', outcome: 'ok',      elapsed:  633 }
+ * { label: 'third(3000ms)',  outcome: 'ok',      elapsed:  290 }
+ * ```
+ *
+ * 第一次超时后，`postgres-js` 并没有取消那次建连 —— 它还在推进。第二次
+ * 查询排在同一个池（`max: 1`）后面，等握手一完成就立刻拿到连接，633ms 就回来了。
+ * 所以「超时后重试一次」不是赌运气，而是**把已经在进行中的建连等完**。
+ *
+ * 为什么不在超时后直接调大 PROBE_TIMEOUT_MS 到 5s：
+ * 那会让真正挂住的库把探针拖到 5 秒，监控自己的超时（常见 5–10s）就危险了。
+ * 3s + 3s 的两段式总上限 6s，且**只有超时才重试**（见下面的 `shouldRetry`）——
+ * 真故障（拒绝连接 / 认证失败）第一次就抛错，立即返回 `down`，不浪费时间。
+ */
+const PROBE_RETRY_TIMEOUT_MS = 3_000;
 
 /** 短 commit sha 的字符数。7 位是 git 的默认短 sha 长度。 */
 const SHORT_SHA_LENGTH = 7;
@@ -74,6 +111,43 @@ function resolveVersion(): string {
   return raw.slice(0, SHORT_SHA_LENGTH);
 }
 
+/** 单次探活的三种结局。`error` 与 `timeout` 必须分开 —— 只有后者值得重试。 */
+type ProbeOutcome = "ok" | "timeout" | "error";
+
+/**
+ * 跑一次探活，带上超时。
+ *
+ * 为什么用 `Promise.race` 而不是给 postgres-js 传 `connect_timeout`：
+ * 那个参数只管「建连」，管不住「连上了但语句卡住」，也管不住
+ * 已经有缓存连接时的一次慢查询。race 是在调用方这一层兜底，覆盖面更全。
+ *
+ * 为什么必须区分 `timeout` 与 `error`：重试策略完全相反 ——
+ * 超时说明建连还在推进（重试能等到它），而拒绝连接 / 认证失败
+ * 重试一次只是把同一秒的错误再犯一遍，白白让监控多等 3 秒。
+ */
+async function probeOnce(timeoutMs: number): Promise<ProbeOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`health probe timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
+
+    await Promise.race([probeDatabase(), timeout]);
+    return "ok";
+  } catch (error) {
+    // 只有超时是「还没结论」，其余都是「有结论的失败」。
+    const message = error instanceof Error ? error.message : "";
+    return message.startsWith("health probe timed out") ? "timeout" : "error";
+  } finally {
+    // 必须清掉定时器，否则每次探活都会留下一个 3 秒的待办计时器。
+    // 健康检查被监控高频拉取时，这会变成真实的句柄泄漏（进程退不干净）。
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /**
  * 执行一次数据库探活。超时或抛错都算 `down`，**绝不抛出**。
  *
@@ -92,31 +166,18 @@ function resolveVersion(): string {
  * 需要排查时看服务端日志。
  */
 export async function checkDatabase(): Promise<HealthStatus> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // 没配库是配置状态，不是故障 —— 见上面 degraded 的解释。
+  if (!hasDatabaseUrl()) return "degraded";
 
-  try {
-    // 没配库是配置状态，不是故障 —— 见上面 degraded 的解释。
-    if (!hasDatabaseUrl()) return "degraded";
+  const first = await probeOnce(PROBE_TIMEOUT_MS);
 
-    // 超时用 Promise.race 而不是给 postgres-js 传 connect_timeout：
-    // 那个参数只管「建连」，管不住「连上了但语句卡住」，也管不住
-    // 已经有缓存连接时的一次慢查询。race 是在调用方这一层兜底，覆盖面更全。
-    const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        reject(new Error(`health probe timed out after ${PROBE_TIMEOUT_MS}ms`));
-      }, PROBE_TIMEOUT_MS);
-    });
+  // 连上了 / 真报错（拒绝连接、认证失败、SQL 错）都立即定论，不重试。
+  // 只有「超时」这一种情况值得再给一次机会 —— 理由见 PROBE_RETRY_TIMEOUT_MS。
+  if (first === "ok") return "ok";
+  if (first !== "timeout") return "down";
 
-    await Promise.race([probeDatabase(), timeout]);
-    return "ok";
-  } catch {
-    // 故意不回传错误对象：见函数注释。这里只关心「可用 / 不可用」。
-    return "down";
-  } finally {
-    // 必须清掉定时器，否则每次探活都会留下一个 3 秒的待办计时器。
-    // 健康检查被监控高频拉取时，这会变成真实的句柄泄漏（进程退不干净）。
-    if (timer !== undefined) clearTimeout(timer);
-  }
+  const second = await probeOnce(PROBE_RETRY_TIMEOUT_MS);
+  return second === "ok" ? "ok" : "down";
 }
 
 /**

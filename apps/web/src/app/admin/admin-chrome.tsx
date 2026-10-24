@@ -64,12 +64,14 @@ export function AdminChrome({
       {/* 顶栏：移动端放抽屉按钮，桌面端只在左侧栏出现。 */}
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 lg:hidden">
         <span className="text-sm font-semibold text-foreground">后台</span>
+        {/* h-11 w-11 + 居中：纯图标按钮的命中区域必须是 44×44（WCAG 2.5.5）。
+            原来只有 p-2（8px×2）+ 16px 图标 = 32×32，在触屏上极易误触。 */}
         <button
           type="button"
           onClick={() => setDrawerOpen((open) => !open)}
           aria-label={drawerOpen ? "关闭菜单" : "打开菜单"}
           aria-expanded={drawerOpen}
-          className="rounded-lg border border-border p-2 text-muted hover:text-accent"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted hover:text-accent"
         >
           {drawerOpen ? <CloseIcon width={16} height={16} /> : <MenuIcon width={16} height={16} />}
         </button>
@@ -100,7 +102,9 @@ export function AdminChrome({
                       onClick={() => setDrawerOpen(false)}
                       aria-current={active ? "page" : undefined}
                       className={[
-                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                        // min-h-11：导航项是后台最高频的点击目标，命中区域 44px（WCAG 2.5.5）。
+                        // 保留 py-2 而不是换成固定高度：多行文本时还要能撑开。
+                        "flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
                         active
                           ? "bg-accent/10 font-medium text-accent"
                           : "text-muted hover:bg-elevated hover:text-foreground",
@@ -152,13 +156,18 @@ export function AdminChrome({
             </div>
 
             <div className="flex items-center justify-between gap-2">
-              <Link href="/" className="text-xs text-muted hover:text-accent">
+              {/* 返回站点 / 登出这两个目标原来只有 16px 与 28px 高，是后台最窄的命中区域
+                  （WCAG 2.5.5 要求 44px）。用 min-h-11 + 行内居中撑开，视觉字号不变。 */}
+              <Link
+                href="/"
+                className="inline-flex min-h-11 items-center text-xs text-muted hover:text-accent"
+              >
                 返回站点
               </Link>
               <form action={adminSignOutAction}>
                 <button
                   type="submit"
-                  className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted transition-colors hover:border-error hover:text-error"
+                  className="inline-flex min-h-11 items-center rounded-lg border border-border px-2.5 text-xs text-muted transition-colors hover:border-error hover:text-error"
                 >
                   登出
                 </button>
