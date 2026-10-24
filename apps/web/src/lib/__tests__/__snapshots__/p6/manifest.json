@@ -1,0 +1,207 @@
+{
+  "note": "由 dev server（next dev，127.0.0.1:3210，CONTENT_SOURCE=db）真实抓取的公开页面 HTML。这是 P6 验收证据：证明页面在生产等价的内容源上真的渲染出来了，而不只是源码扫描。",
+  "capturedAt": "2026-10-24T05:46:22.410Z",
+  "base": "http://127.0.0.1:3210",
+  "routeCount": 22,
+  "totalBytes": 1551823,
+  "entries": [
+    {
+      "path": "/",
+      "file": "index.html",
+      "status": 200,
+      "bytes": 42054,
+      "capturedAt": "2026-10-24T05:43:18.518Z",
+      "devServerPort": 3210,
+      "durationMs": 2354
+    },
+    {
+      "path": "/about",
+      "file": "about.html",
+      "status": 200,
+      "bytes": 72769,
+      "capturedAt": "2026-10-24T05:43:34.631Z",
+      "devServerPort": 3210,
+      "durationMs": 16112
+    },
+    {
+      "path": "/blog",
+      "file": "blog.html",
+      "status": 200,
+      "bytes": 54304,
+      "capturedAt": "2026-10-24T05:43:40.070Z",
+      "devServerPort": 3210,
+      "durationMs": 5439
+    },
+    {
+      "path": "/blog/agriculture-feature-engineering",
+      "file": "blog_agriculture-feature-engineering.html",
+      "status": 200,
+      "bytes": 145632,
+      "capturedAt": "2026-10-24T05:43:55.126Z",
+      "devServerPort": 3210,
+      "durationMs": 15055
+    },
+    {
+      "path": "/blog/build-personal-blog-with-nextjs",
+      "file": "blog_build-personal-blog-with-nextjs.html",
+      "status": 200,
+      "bytes": 123742,
+      "capturedAt": "2026-10-24T05:44:10.530Z",
+      "devServerPort": 3210,
+      "durationMs": 15404
+    },
+    {
+      "path": "/blog/langgraph-rag-workflow",
+      "file": "blog_langgraph-rag-workflow.html",
+      "status": 200,
+      "bytes": 121615,
+      "capturedAt": "2026-10-24T05:44:23.018Z",
+      "devServerPort": 3210,
+      "durationMs": 12487
+    },
+    {
+      "path": "/blog/rag-chunking-strategies",
+      "file": "blog_rag-chunking-strategies.html",
+      "status": 200,
+      "bytes": 122800,
+      "capturedAt": "2026-10-24T05:44:35.269Z",
+      "devServerPort": 3210,
+      "durationMs": 12251
+    },
+    {
+      "path": "/diary",
+      "file": "diary.html",
+      "status": 200,
+      "bytes": 39522,
+      "capturedAt": "2026-10-24T05:44:40.120Z",
+      "devServerPort": 3210,
+      "durationMs": 4851
+    },
+    {
+      "path": "/diary/week01",
+      "file": "diary_week01.html",
+      "status": 200,
+      "bytes": 37036,
+      "capturedAt": "2026-10-24T05:44:45.185Z",
+      "devServerPort": 3210,
+      "durationMs": 5064
+    },
+    {
+      "path": "/goals",
+      "file": "goals.html",
+      "status": 200,
+      "bytes": 47540,
+      "capturedAt": "2026-10-24T05:44:49.912Z",
+      "devServerPort": 3210,
+      "durationMs": 4727
+    },
+    {
+      "path": "/projects",
+      "file": "projects.html",
+      "status": 200,
+      "bytes": 62184,
+      "capturedAt": "2026-10-24T05:44:54.206Z",
+      "devServerPort": 3210,
+      "durationMs": 4294
+    },
+    {
+      "path": "/projects/crop-yield-prediction",
+      "file": "projects_crop-yield-prediction.html",
+      "status": 200,
+      "bytes": 78959,
+      "capturedAt": "2026-10-24T05:45:12.429Z",
+      "devServerPort": 3210,
+      "durationMs": 18223
+    },
+    {
+      "path": "/projects/personal-blog-platform",
+      "file": "projects_personal-blog-platform.html",
+      "status": 200,
+      "bytes": 69703,
+      "capturedAt": "2026-10-24T05:45:25.492Z",
+      "devServerPort": 3210,
+      "durationMs": 13063
+    },
+    {
+      "path": "/projects/rag-knowledge-assistant",
+      "file": "projects_rag-knowledge-assistant.html",
+      "status": 200,
+      "bytes": 84519,
+      "capturedAt": "2026-10-24T05:45:30.004Z",
+      "devServerPort": 3210,
+      "durationMs": 4512
+    },
+    {
+      "path": "/resume",
+      "file": "resume.html",
+      "status": 200,
+      "bytes": 65230,
+      "capturedAt": "2026-10-24T05:45:31.523Z",
+      "devServerPort": 3210,
+      "durationMs": 1519
+    },
+    {
+      "path": "/search",
+      "file": "search.html",
+      "status": 200,
+      "bytes": 40561,
+      "capturedAt": "2026-10-24T05:45:33.311Z",
+      "devServerPort": 3210,
+      "durationMs": 1788
+    },
+    {
+      "path": "/tags",
+      "file": "tags.html",
+      "status": 200,
+      "bytes": 48705,
+      "capturedAt": "2026-10-24T05:45:40.735Z",
+      "devServerPort": 3210,
+      "durationMs": 7424
+    },
+    {
+      "path": "/tags/llm",
+      "file": "tags_llm.html",
+      "status": 200,
+      "bytes": 47232,
+      "capturedAt": "2026-10-24T05:45:55.480Z",
+      "devServerPort": 3210,
+      "durationMs": 14745
+    },
+    {
+      "path": "/tags/RAG",
+      "file": "tags_RAG.html",
+      "status": 200,
+      "bytes": 47289,
+      "capturedAt": "2026-10-24T05:46:06.357Z",
+      "devServerPort": 3210,
+      "durationMs": 10877
+    },
+    {
+      "path": "/universe",
+      "file": "universe.html",
+      "status": 200,
+      "bytes": 113926,
+      "capturedAt": "2026-10-24T05:46:13.611Z",
+      "devServerPort": 3210,
+      "durationMs": 7254
+    },
+    {
+      "path": "/tags/%E5%B7%A5%E7%A8%8B%E5%8C%96",
+      "file": "tags_gongchenghua_encoded.html",
+      "status": 200,
+      "bytes": 43389,
+      "capturedAt": "2026-10-24T05:46:21.436Z",
+      "devServerPort": 3210,
+      "durationMs": 7825
+    },
+    {
+      "path": "/tags/工程化",
+      "file": "tags_gongchenghua_raw.html",
+      "status": 200,
+      "bytes": 43112,
+      "capturedAt": "2026-10-24T05:46:22.410Z",
+      "devServerPort": 3210,
+      "durationMs": 974
+    }
+  ]
+}
