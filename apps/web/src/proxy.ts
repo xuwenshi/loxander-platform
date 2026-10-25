@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { parseProbeablePath, NOT_FOUND_PATH, type PageProbe } from "@/lib/proxy-rules";
+import { decodeTagParam, tagSlugOfName } from "@/lib/tag-url";
+
 /**
  * 旧 slug 301 重定向（P3「增加旧 slug 重定向」）。
  *
@@ -43,6 +46,29 @@ const ALLOWED_STATUS = new Set([301, 302, 307, 308]);
 
 /** 单次查库的超时（毫秒）。超时就放行，不拖慢页面。 */
 const LOOKUP_TIMEOUT_MS = 800;
+
+/**
+ * 详情页存在性检查的超时（毫秒）。
+ *
+ * ── 为什么是 5000ms 而不是 1000ms（实测教训）──────────────────────────
+ * 第一版写 1000ms（比 `LOOKUP_TIMEOUT_MS` 宽 200ms 而已），结果**软 404 没修掉**：
+ * 冷连接超时 → 判定「无法确定」→ 放行 → 页面自己 `notFound()` → 但状态码已定成 200。
+ *
+ * 实测（`.tmp-neon-latency.mjs`，P6 期同一台机器）：
+ * ```
+ * cold connect+select1 = 4320 ms
+ * warm #0              =  815 ms
+ * warm #1              =  228 ms
+ * warm #2              =  286 ms
+ * ```
+ * 1000ms 只能兜住「已预热」的情形，第一次请求必然漏。所以这里必须**大于冷启动**。
+ *
+ * ── 代价与取舍 ──────────────────────────────────────────────────────
+ * 这个探针只在「详情页 + 数据库源」的请求上跑，且只在 proxy 里查一列 `1`。
+ * 冷连接时它会给该次请求的首字节时间加最多 ~4.3 秒 —— 换来的是**正确的 404 语义**。
+ * 若库真的挂了，超时后仍会放行（`null` → 当作存在），不会把站点变成 500。
+ */
+const PROBE_TIMEOUT_MS = 5_000;
 
 /**
  * Auth.js v5 的会话 Cookie 名。
@@ -139,6 +165,135 @@ async function lookupWithTimeout(pathname: string): Promise<RedirectRow | null> 
   }
 }
 
+/**
+ * 内容 / 标签详情页的**存在性检查**（P7 修软 404）。
+ *
+ * ── 缺陷本体 ─────────────────────────────────────────────────────────
+ * 生产构建实测（`next start`，端口 3310）：同一个不存在的 URL，
+ * **第一次请求返回 `200`，第二次才返回 `404`**：
+ * ```
+ * 首次 200  /blog/nope-xxx-a   noindex=Y  x-nextjs-cache=-
+ * 二次 404  /blog/nope-xxx-a   noindex=Y  x-nextjs-cache=HIT
+ * ```
+ * 四个详情页前缀（`/blog/` `/diary/` `/projects/` `/tags/`）全部复现。
+ * 旧站（`https://loxander.is-a.dev`）对同样五条路径**全部正确 404** ——
+ * 所以这是新站相对旧站的**行为退化**，落在方案 P7 验收第 2 条「旧 URL 正常」里。
+ *
+ * ── 根因（Next 官方文档逐字）────────────────────────────────────────
+ * `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/not-found.md:193`：
+ * 「The response starts streaming from the `<Suspense>` boundary before `notFound()`
+ * runs, so it keeps its `200` status.」
+ * 本项目所有详情页构建产物都是 `◐ Partial Prerender`：shell 在构建期预渲染，
+ * 请求一来先把 shell 吐出去（状态码此刻已定为 200），`await getX(slug)` 之后
+ * 才 `notFound()`。第二次请求命中缓存里那份真 404，所以「第一次 200、第二次 404」。
+ *
+ * ── 为什么修在这里 ───────────────────────────────────────────────────
+ * 同文件 `:195`：「A request-time check can run in Proxy before the page renders.」
+ * `loading.md:113`：「For a `404`, you can check the slug in Proxy, then rewrite it
+ * to a not-found route or return a `404` response. **Keep Proxy checks fast, and
+ * avoid fetching full content there.**」
+ * → 只查 `exists`，不取任何字段，不 join 正文。
+ *
+ * ── 为什么不能用 `dynamicParams = false` ─────────────────────────────
+ * `dynamicParams.md:22`：「`dynamicParams` is not available when Cache Components
+ * is enabled.」本项目开了 `cacheComponents: true`，导它直接构建失败。
+ *
+ * ── 失败策略：与重定向查表一致，一律放行 ────────────────────────────
+ * 查库失败 / 超时 / 没配 DATABASE_URL → 返回 `null`（＝「当作存在」），
+ * 交给页面自己 `notFound()`。理由同文件头：可选的 404 纠偏功能不该把站点变成 500。
+ * 代价是「库挂了的时候软 404 会回来」——这比整站 500 好得多。
+ */
+async function probePageExists(probe: PageProbe): Promise<boolean | null> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+
+  // 与页面层同一条可见性判据（`lib/sources/db.ts` 的 `includeDrafts`）：
+  // 生产只认 published；非生产把草稿也算「存在」，否则本地看草稿会被这里误杀。
+  const publishedOnly = process.env.NODE_ENV === "production";
+
+  const { default: postgres } = await import("postgres");
+  const client = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 5 });
+
+  try {
+    if (probe.kind === "tag") {
+      // 标签页的「存在」判据与 `getPostsByTag()` 一致：这个标签下**至少有一篇可见文章**。
+      // 只查 `tags` 表会漏掉「标签建了但文章全删了」的空页面 —— 那种页面在
+      // `app/(site)/tags/[tag]/page.tsx` 里会走 `notFound()`，这里必须同样判空。
+      const tagSlug = tagSlugOfName(decodeTagParam(probe.value));
+      if (!tagSlug) return false;
+
+      // ⚠️ 必须 `lower(t.name)` 而不是 `t.slug`，且必须带 `e.kind = 'blog'` + 可见性过滤。
+      //
+      // 判据必须与页面**完全一致**：`app/(site)/tags/[tag]/page.tsx:78-79` 是
+      // `tags.find(({ tag: name }) => tagSlugOfName(name) === param)`，而那个 `tags`
+      // 来自 `getAllTags()` —— 它的实现是遍历 `getAllPostsCached()` 的 `post.tags`，
+      // 而 `post.tags` 由 `loadTagNamesOf()` 从 **`tags.name`** 填充（不是 `tags.slug`，
+      // `db/mapping.ts` 的 `tagSlugOf()` 是恒等函数，slug 存的是原文）。
+      // 所以 URL 段对应的永远是**标签名**，且只统计**可见文章**上的标签。
+      // 若这里改用 `t.slug` 或去掉 entries 过滤，就会出现「proxy 说有、页面 404」
+      // 或反过来的错配。
+      const rows = await client<{ one: number }[]>`
+        select 1 as one
+        from tags t
+        join entry_tags et on et.tag_id = t.id
+        join entries e on e.id = et.entry_id
+        where lower(t.name) = ${tagSlug}
+          and e.kind = 'blog'
+          ${publishedOnly ? client`and e.publish_status = 'published'` : client``}
+        limit 1
+      `;
+      return rows.length > 0;
+    }
+
+    const rows = await client<{ one: number }[]>`
+      select 1 as one
+      from entries
+      where kind = ${probe.contentType ?? ""}
+        and slug = ${probe.value}
+        ${publishedOnly ? client`and publish_status = 'published'` : client``}
+      limit 1
+    `;
+    return rows.length > 0;
+  } finally {
+    await client.end({ timeout: 1 }).catch(() => {});
+  }
+}
+
+/**
+ * 存在性检查 + 超时。
+ *
+ * ── 返回值是**三态**，只有明确 `false` 才算「不存在」 ────────────────
+ * `probePageExists` 返回 `boolean | null`：
+ * - `true`  → 查到，存在
+ * - `false` → 查了，确认不存在 → **这是唯一会 rewrite 成 404 的分支**
+ * - `null`  → 没配 DATABASE_URL，无法判定 → 放行
+ *
+ * 超时同样 resolve `null`（无法判定）→ 放行。
+ *
+ * ⚠️ 这里踩过一次真实事故（必须留档）：第一版写成 `return result === true`，
+ * 于是「超时」被当成「不存在」。而 Neon 冷启动实测 4320ms、探针超时 1000ms，
+ * 结果**全部详情页在冷连接窗口内返回 404**（实测 `/blog/rag-chunking-strategies`
+ * 也 404），比原来的软 404 严重得多。正确写法是 `result !== false` ——
+ * 把「无法判定」和「确认不存在」彻底分开。
+ */
+async function probeWithTimeout(probe: PageProbe): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
+  });
+
+  try {
+    const result = await Promise.race([probePageExists(probe), timeout]);
+    // 只有明确的 false 才判「不存在」；null（超时 / 没配库）一律放行。
+    return result !== false;
+  } catch (error) {
+    console.error("[proxy] 详情页存在性检查失败，本次请求放行：", error);
+    return true;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
@@ -156,16 +311,30 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (process.env.CONTENT_SOURCE !== "db") return NextResponse.next();
 
   try {
+    // 先看是不是旧链接：命中就 301，比存在性检查更优先
+    // （旧链接的目标可能已经不存在，但跳转本身仍是正确行为）。
     const row = await lookupWithTimeout(pathname);
-    if (!row) return NextResponse.next();
-
-    const status = ALLOWED_STATUS.has(row.status_code) ? row.status_code : 301;
-    return NextResponse.redirect(new URL(row.target_path, request.url), status);
+    if (row) {
+      const status = ALLOWED_STATUS.has(row.status_code) ? row.status_code : 301;
+      return NextResponse.redirect(new URL(row.target_path, request.url), status);
+    }
   } catch (error) {
     // 查库失败一律放行：旧链接跳转是可选功能，不能让它把站点变成 500。
     console.error("[proxy] 重定向查表失败，本次请求放行：", error);
     return NextResponse.next();
   }
+
+  // 不是旧链接，再看是不是「不存在的详情页」—— 是就 rewrite 到 /_not-found，
+  // 让状态码在响应体开始流出之前就定成 404（见 probePageExists 的缺陷说明）。
+  const probe = parseProbeablePath(pathname);
+  if (probe !== null) {
+    const exists = await probeWithTimeout(probe);
+    if (!exists) {
+      return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url));
+    }
+  }
+
+  return NextResponse.next();
 }
 
 /**
