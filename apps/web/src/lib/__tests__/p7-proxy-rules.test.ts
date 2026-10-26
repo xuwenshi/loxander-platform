@@ -265,21 +265,23 @@ test("P7-W1：proxy.ts 真的调用了 parseProbeablePath 并 rewrite 到 NOT_FO
     /const\s+probe\s*=\s*parseProbeablePath\(\s*pathname\s*\)/,
     "proxy.ts 没有调用 parseProbeablePath —— 软 404 修复没接上",
   );
+  // rewrite 收敛到 notFoundRewrite() 一个函数里（见 P7-W12 的理由），
+  // 所以这里断言的是「确认不存在 → 调 notFoundRewrite」，而不是直接内联 rewrite。
   assert.match(
     PROXY_SOURCE,
-    /if\s*\(\s*!exists\s*\)\s*\{?\s*return\s+NextResponse\.rewrite\(\s*new\s+URL\(\s*NOT_FOUND_PATH/,
-    "proxy.ts 没有在「确认不存在」时 rewrite 到 NOT_FOUND_PATH —— 状态码仍然会是 200",
+    /if\s*\(\s*!exists\s*\)\s*\{?\s*return\s+notFoundRewrite\(\s*request\s*\)/,
+    "proxy.ts 没有在「确认不存在」时走 notFoundRewrite —— 状态码仍然会是 200",
   );
 });
 
 test("P7-W2：404 一律用 rewrite 而不是 redirect（不能变成跳转）", () => {
   const rewriteCalls = PROXY_SOURCE.match(/NextResponse\.rewrite\(/g) ?? [];
-  // 现在是**两处**：db 分支与 markdown 分支各一处（回滚通道软 404 修复后新增）。
-  // 断言上限而非等值，是因为「多写一处 rewrite」本身不可怕（都指向同一个 NOT_FOUND_PATH），
+  // rewrite 现在只允许出现在 notFoundRewrite() 里（一处），
+  // 两个分支都调那个函数。上限 2 是给「以后真需要第二处 rewrite」留的余量，
   // 可怕的是有人把其中一处换成 redirect —— 那由下面的反向断言守。
   assert.ok(
     rewriteCalls.length >= 1 && rewriteCalls.length <= 2,
-    `proxy.ts 里 NextResponse.rewrite 应当有 1~2 处（db / markdown 两个分支各一），实际 ${rewriteCalls.length}`,
+    `proxy.ts 里 NextResponse.rewrite 应当有 1~2 处，实际 ${rewriteCalls.length}`,
   );
 
   // 每一处 rewrite 的目标都必须是 NOT_FOUND_PATH —— 不许有人顺手 rewrite 到别处。
@@ -292,6 +294,41 @@ test("P7-W2：404 一律用 rewrite 而不是 redirect（不能变成跳转）",
   assert.ok(
     !/NextResponse\.redirect\(\s*new\s+URL\(\s*NOT_FOUND_PATH/.test(PROXY_SOURCE),
     "NOT_FOUND_PATH 不能用 redirect —— 那会变成 307/301 跳转，URL 会变，语义全错",
+  );
+});
+
+test("P7-W12：rewrite 到 404 必须显式带 status: 404（线上软 404 的真根因）", () => {
+  /*
+   * ── 这条守的是线上真事故 ────────────────────────────────────────────
+   * `NextResponse.rewrite(destination)` 不带 init 时底层是
+   * `new NextResponse(null, { headers })`，**状态码是默认 200**
+   * （`next/dist/server/web/spec-extension/response.js` 的 `static rewrite`）。
+   * 而 Next 服务端用 middleware 的 status 当最终状态码
+   * （`next/dist/server/lib/router-utils/resolve-routes.js:377`
+   * `res.statusCode = middlewareRes.status;`），rewrite 分支不重置它。
+   *
+   * 本地 `next start` 看不出来 —— `server/base-server.js` 有一条
+   * `if (is404Page && ...) res.statusCode = 404;` 会把 200 掰回 404。
+   * Vercel 是 minimalMode + PPR，走 `build/templates/app-page-runtime.js`，
+   * `/_not-found` 命中预渲染缓存后直接用 200 输出并被 CDN 缓存
+   * （实测 `x-nextjs-prerender: 1` + `x-vercel-cache: HIT` + 无 noindex）。
+   * 后果：搜索引擎把这些 URL 当正常页面收录。
+   *
+   * 所以断言「带 status: 404」这件事本身 —— 少了它站点照样能跑、测试照样全绿，
+   * 只有上线后拿真实 HTTP 状态码才看得见。这正是最容易在重构中被删掉的那类代码。
+   */
+  assert.match(
+    PROXY_SOURCE,
+    /NextResponse\.rewrite\(\s*new\s+URL\(\s*NOT_FOUND_PATH[^)]*\)\s*,\s*\{\s*status\s*:\s*404\s*\}\s*\)/,
+    "rewrite 到 NOT_FOUND_PATH 没带 status: 404 —— 线上会变成 200 软 404（Vercel 上 PPR 静态缓存会以 200 服务）",
+  );
+
+  // 反向守卫：不许出现「rewrite 到 NOT_FOUND_PATH 但不带 init」的单参数写法。
+  const bare = PROXY_SOURCE.match(/NextResponse\.rewrite\(\s*new\s+URL\(\s*NOT_FOUND_PATH[^)]*\)\s*\)/g) ?? [];
+  assert.deepEqual(
+    bare,
+    [],
+    `发现不带 status 的 rewrite（线上会 200）：${bare.join(" | ")}`,
   );
 });
 
@@ -519,8 +556,10 @@ test("P7-R9：markdown 分支必须也做存在性检查（否则回滚通道软
 
   const branch = PROXY_SOURCE.slice(branchIdx, branchIdx + 900);
 
-  // 该分支里必须出现 markdownProbeExists 与 NOT_FOUND_PATH —— 两个都要，
-  // 只调探针不 rewrite 等于「查了但不管」，是本缺陷最可能的退化形态。
+  // 该分支里必须出现 markdownProbeExists 与 notFoundRewrite —— 两个都要，
+  // 只调探针不处置等于「查了但不管」，是本缺陷最可能的退化形态。
+  // 处置动作收敛在 notFoundRewrite() 里（它内部才带 status: 404，见 P7-W12），
+  // 所以这里断言的是调用那个函数，而不是内联的 NOT_FOUND_PATH 字面量。
   assert.match(
     branch,
     /markdownProbeExists\s*\(/,
@@ -528,8 +567,8 @@ test("P7-R9：markdown 分支必须也做存在性检查（否则回滚通道软
   );
   assert.match(
     branch,
-    /NOT_FOUND_PATH/,
-    "markdown 分支里没有 rewrite 到 NOT_FOUND_PATH —— 查了却没处置，软 404 依旧是 200",
+    /notFoundRewrite\s*\(\s*request\s*\)/,
+    "markdown 分支里没有走 notFoundRewrite —— 查了却没处置，软 404 依旧是 200",
   );
 
   // 反向：这个分支里**不许**再出现裸的提前 return。

@@ -348,6 +348,42 @@ async function probeWithTimeout(probe: PageProbe): Promise<boolean> {
   }
 }
 
+/**
+ * 把「不存在的详情页」rewrite 成 404。
+ *
+ * ── 为什么必须显式写 `status: 404`（线上真事故，必须留档）─────────────
+ * `NextResponse.rewrite(destination)` 不带 init 时，底层是
+ * `new NextResponse(null, { headers })` —— **状态码是默认的 200**
+ * （`node_modules/next/dist/server/web/spec-extension/response.js:108-116`，
+ * `static rewrite` 只 `headers.set('x-middleware-rewrite', ...)` 就返回）。
+ *
+ * 而 Next 服务端拿 middleware 的 status 当最终状态码：
+ * `node_modules/next/dist/server/lib/router-utils/resolve-routes.js:377`
+ * `res.statusCode = middlewareRes.status;`。rewrite 分支（:468-486）只改
+ * `parsedUrl`，**不重置 status**，于是 200 一路带到底。
+ *
+ * 本地 `next start` 看不出来：`server/base-server.js:1519` 有一条
+ * `if (is404Page && !isNextDataRequest && !isRSCRequest) res.statusCode = 404;`
+ * 会把 200 掰回 404。但 Vercel 是 minimalMode + PPR，走的是
+ * `build/templates/app-page-runtime.js`：`/_not-found` 是**预渲染静态页**，
+ * 命中缓存后 `:1390-1392` 的 `if (cachedData.status && ...) res.statusCode = cachedData.status;`
+ * 只在缓存条目自带 status 时才覆盖 —— 而 rewrite 请求的状态码在到达这里之前
+ * 就已经是 middleware 给的 200，于是最终以 **200 + `x-nextjs-prerender: 1`**
+ * 发给浏览器并被 CDN 缓存（实测 `x-vercel-cache: HIT`）。
+ * 后果：搜索引擎会把这些 URL 当正常页面收录（软 404），而且
+ * `<meta name="robots" content="noindex">` 也不会出现（那是 404 分支才注入的）。
+ *
+ * 官方文档 `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/loading.md:107-118`
+ * 也明确说了：流式 404 的 HTTP 状态可能是 200，要靠 `noindex` 兜住，
+ * 而「想在响应体流出前就给出 404，就在 Proxy 里检查并把状态码定下来」。
+ *
+ * 所以这里统一走一个函数，把 `status: 404` 和「为什么不带就错」绑在一起，
+ * 避免以后有人图省事又写回单参数形式。
+ */
+function notFoundRewrite(request: NextRequest): NextResponse {
+  return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url), { status: 404 });
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
@@ -373,7 +409,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         // 与 db 路径同一套失败策略：判不了就放行，不能把站点变成 500。
         console.error("[proxy] markdown 存在性检查失败，本次请求放行：", error);
       }
-      if (!exists) return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url));
+      if (!exists) return notFoundRewrite(request);
     }
     return NextResponse.next();
   }
@@ -398,7 +434,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (probe !== null) {
     const exists = await probeWithTimeout(probe);
     if (!exists) {
-      return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url));
+      return notFoundRewrite(request);
     }
   }
 

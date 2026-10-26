@@ -46,3 +46,11 @@ npm-debug.log*
 .DS_Store
 .idea/
 .vscode/
+
+# Vercel CLI 的本地链接信息（含 projectId / orgId，不是秘密但每台机器不同）
+.vercel
+# 刻意不写 `.env*`：那会把 `apps/web/.env.example`（要进版本库的模板）也忽略掉。
+# 真正的密钥文件由上面的 `.env` 与 `.env*.local` 覆盖，Vercel CLI 生成的
+# 根目录 `.env.local`（只含 VERCEL_OIDC_TOKEN）也落在 `.env*.local` 里。
+.env.local
+.env.*.local
