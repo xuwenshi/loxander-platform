@@ -29,7 +29,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { dirname, resolve as resolvePath } from "node:path";
 import test from "node:test";
@@ -123,6 +123,20 @@ function stripComments(source: string): string {
 const PROXY_SOURCE = stripComments(
   await import("node:fs").then((fs) =>
     fs.readFileSync(resolvePath(SRC_DIR, "proxy.ts"), "utf8"),
+  ),
+);
+
+/**
+ * `sources/db.ts` 的源码（同样剥注释）。
+ *
+ * 只给 P7-W9 用：那条守的是「`loadRows` 不许无参 `db.select()`」，
+ * 属于读路径的性能约束，与 proxy 无关，但同属 P7 收口时发现的问题，
+ * 放在这个文件里比新开一个只含一条断言的测试文件更好维护
+ * （新文件要再复制一遍 60 行的 `registerHooks` 与路径常量）。
+ */
+const DB_SOURCE = stripComments(
+  await import("node:fs").then((fs) =>
+    fs.readFileSync(resolvePath(SRC_DIR, "lib/sources/db.ts"), "utf8"),
   ),
 );
 
@@ -258,9 +272,23 @@ test("P7-W1：proxy.ts 真的调用了 parseProbeablePath 并 rewrite 到 NOT_FO
   );
 });
 
-test("P7-W2：rewrite 用的是 rewrite 而不是 redirect（404 不能变成跳转）", () => {
+test("P7-W2：404 一律用 rewrite 而不是 redirect（不能变成跳转）", () => {
   const rewriteCalls = PROXY_SOURCE.match(/NextResponse\.rewrite\(/g) ?? [];
-  assert.equal(rewriteCalls.length, 1, `proxy.ts 里应当恰好有 1 处 NextResponse.rewrite，实际 ${rewriteCalls.length}`);
+  // 现在是**两处**：db 分支与 markdown 分支各一处（回滚通道软 404 修复后新增）。
+  // 断言上限而非等值，是因为「多写一处 rewrite」本身不可怕（都指向同一个 NOT_FOUND_PATH），
+  // 可怕的是有人把其中一处换成 redirect —— 那由下面的反向断言守。
+  assert.ok(
+    rewriteCalls.length >= 1 && rewriteCalls.length <= 2,
+    `proxy.ts 里 NextResponse.rewrite 应当有 1~2 处（db / markdown 两个分支各一），实际 ${rewriteCalls.length}`,
+  );
+
+  // 每一处 rewrite 的目标都必须是 NOT_FOUND_PATH —— 不许有人顺手 rewrite 到别处。
+  const targets = PROXY_SOURCE.match(/NextResponse\.rewrite\(\s*new\s+URL\(\s*([A-Za-z_$][\w$]*)/g) ?? [];
+  assert.equal(targets.length, rewriteCalls.length, "有 rewrite 调用没走 new URL(<常量>, ...) 的形态");
+  for (const call of targets) {
+    assert.match(call, /NOT_FOUND_PATH$/, `rewrite 目标不是 NOT_FOUND_PATH：${call}`);
+  }
+
   assert.ok(
     !/NextResponse\.redirect\(\s*new\s+URL\(\s*NOT_FOUND_PATH/.test(PROXY_SOURCE),
     "NOT_FOUND_PATH 不能用 redirect —— 那会变成 307/301 跳转，URL 会变，语义全错",
@@ -380,4 +408,205 @@ test("P7-W8：生产环境下存在性检查必须只认 published（否则草�
   );
   const guards = tail.match(/publish_status\s*=\s*'published'/g) ?? [];
   assert.ok(guards.length >= 2, `content 与 tag 两条 SQL 都要有 published 过滤，实际命中 ${guards.length} 处`);
+});
+
+/* -------------------------------------------------------------------------- */
+/* P7-W9：读路径不得整表取列（性能闸门）                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 这条守的是一个**性能**缺陷，不是功能缺陷 —— 所以它单独成组，且写清来龙去脉。
+ *
+ * ── 缺陷 ──────────────────────────────────────────────────────────────
+ * P7 收口时用 Playwright 做真实浏览器验收，发现 `/search` 表单提交后要
+ * **8–12 秒**才出结果。逐步测量后定位到 `sources/db.ts` 的 `loadRows()`：
+ * 它写的是无参 `db.select().from(entries)`，会把 `entries` 的**全部列**取回来，
+ * 而 `body_html` 是这份数据里最宽的一列。
+ *
+ * Neon 主分支 10 行数据的实测列宽：
+ * ```
+ * body_md    合计  24 051 B
+ * body_html  合计 132 042 B   ← 5.5 倍，单行最大 34 874 B
+ * ```
+ * 而本文件**从不读 `body_html`**（读路径一律从 `body_md` 重渲染）。
+ *
+ * 同一查询的实测耗时（kind='blog' 的 4 行）：
+ * ```
+ * select * from entries where kind='blog'      11 069 ms
+ * 显式列（不含 body_html）                       1 316 ms
+ * ```
+ *
+ * 为什么偏偏是 `/search` 受害最重：按方案 §14.2，搜索是「动态查询」，
+ * `searchPosts()` 刻意不套 `"use cache"` —— 列表页付一次，搜索**每次请求都付**。
+ *
+ * ── 为什么这条必须用源码断言而不是行为断言 ────────────────────────────
+ * 行为断言只能测「耗时」，而耗时依赖网络与 Neon 冷热状态，天生不稳定
+ * （同一查询在本机实测 1.3s–11s 之间浮动）。但**「有没有多取一列」是确定的**，
+ * 用源码断言可以零成本、零抖动地钉死。
+ *
+ * 反向变异（已验证）：把 `loadRows` 里的显式列换回无参 `db.select()` → 本条变红。
+ */
+test("P7-W9：loadRows 必须显式列名，不得无参 db.select()（body_html 合计 132KB 是白拉的）", () => {
+  const dbSourceIdx = DB_SOURCE.indexOf("async function loadRows");
+  assert.ok(dbSourceIdx > 0, "sources/db.ts 里找不到 loadRows");
+  const tail = DB_SOURCE.slice(dbSourceIdx, dbSourceIdx + 2500);
+
+  assert.ok(
+    !/\.select\(\)\s*\.from\(entries\)/.test(tail),
+    "loadRows 里出现了无参 db.select().from(entries) —— 它会把 body_html（合计 132KB、单行最大 34KB）一并取回，" +
+      "而本文件从不读它。实测同一查询 11 069ms vs 1 316ms，/search 每次请求都付这笔钱",
+  );
+
+  // 正向：必须能看到显式列清单，且清单里包含真正需要的几个宽列/关键列。
+  assert.match(tail, /\.select\(\{/, "loadRows 必须显式列出要取的列");
+  for (const column of ["id", "slug", "body_md", "publish_status", "data"]) {
+    assert.match(
+      tail,
+      new RegExp(`\\b${column}\\s*:\\s*entries\\.${column}\\b`),
+      `loadRows 的显式列清单里缺少 ${column}`,
+    );
+  }
+
+  // 反向：显式清单里**不许**出现 body_html。
+  assert.ok(
+    !/body_html\s*:\s*entries\.body_html/.test(tail),
+    "loadRows 的列清单里出现了 body_html —— 本文件从不读它，加了就等于把 132KB 又拉回来",
+  );
+});
+
+/* ========================================================================== */
+/* 4. 回滚通道：markdown 源软 404（P7 收口发现的第二个真缺陷）                  */
+/* ========================================================================== */
+
+/**
+ * 背景（实测证据，勿删）：
+ *
+ * P7 修好 db 源软 404 后，回滚演练 B 腿（`CONTENT_SOURCE=markdown` + 真库）
+ * 只有 12/13 —— `/blog/this-slug-does-not-exist` 返回 **200**。
+ * 影响面测绘（同一份构建产物，只改运行时 `CONTENT_SOURCE`）：
+ * ```
+ *                                   mode=markdown      mode=db
+ * /blog/nope-blog                    200 ✗ 软 404       404 ✓
+ * /diary/nope-diary                  200 ✗ 软 404       404 ✓
+ * /projects/nope-project             200 ✗ 软 404       404 ✓
+ * /tags/nope-tag                     200 ✗ 软 404       404 ✓
+ * /totally-unknown-path              404 ✓              404 ✓
+ * ```
+ * 根因：`proxy.ts` 里 `if (process.env.CONTENT_SOURCE !== "db") return NextResponse.next();`
+ * 把整段存在性检查放在 db 分支**之后**，回滚到 markdown 时全部跳过。
+ * 而方案 §16.2 明确把 markdown 定为**回滚通道** —— 一条救火通道不该自带 SEO 脏数据。
+ *
+ * 修法：新增 `lib/proxy-markdown-probe.ts`（只读文件系统，不连库），
+ * `proxy.ts` 在 markdown 分支里也做存在性检查。
+ */
+
+/**
+ * markdown 探针源码，**剥掉注释**。
+ *
+ * 必须剥：`lib/proxy-markdown-probe.ts` 的文件头注释里，为了解释「为什么不复用
+ * `lib/posts.ts`」而明确写了 `@loxander/markdown` 这个词。不剥注释的话，
+ * 下面那条「不许导入 markdown 管线」的反向断言会被注释本身喂饱 —— 这正是
+ * P6 闸门矩阵报告里记录过的同类空转（「词在任何地方出现一次就绿」）。
+ */
+const MARKDOWN_PROBE_SOURCE = stripComments(
+  readFileSync(resolvePath(SRC_DIR, "lib/proxy-markdown-probe.ts"), "utf8"),
+);
+
+test("P7-R9：markdown 分支必须也做存在性检查（否则回滚通道软 404 全回来）", () => {
+  // 定位 proxy.ts 里 markdown 分支的那一行（剥掉注释后再找）。
+  const branchIdx = PROXY_SOURCE.indexOf('process.env.CONTENT_SOURCE !== "db"');
+  assert.ok(branchIdx > 0, "proxy.ts 里找不到 CONTENT_SOURCE !== \"db\" 的分支");
+
+  const branch = PROXY_SOURCE.slice(branchIdx, branchIdx + 900);
+
+  // 该分支里必须出现 markdownProbeExists 与 NOT_FOUND_PATH —— 两个都要，
+  // 只调探针不 rewrite 等于「查了但不管」，是本缺陷最可能的退化形态。
+  assert.match(
+    branch,
+    /markdownProbeExists\s*\(/,
+    "markdown 分支里没有调用 markdownProbeExists —— 存在性检查又被跳过了（回滚软 404 会回来）",
+  );
+  assert.match(
+    branch,
+    /NOT_FOUND_PATH/,
+    "markdown 分支里没有 rewrite 到 NOT_FOUND_PATH —— 查了却没处置，软 404 依旧是 200",
+  );
+
+  // 反向：这个分支里**不许**再出现裸的提前 return。
+  // 正确写法是 `if (...) { ...; return NextResponse.next(); }` ——
+  // 有花括号块，且 next() 在检查之后。裸写法 `if (...) return NextResponse.next();`
+  // 会让后续所有逻辑被整段跳过，正是本缺陷的原形。
+  assert.ok(
+    !/if\s*\(\s*process\.env\.CONTENT_SOURCE\s*!==\s*"db"\s*\)\s*return\s+NextResponse\.next\(\)/.test(
+      PROXY_SOURCE,
+    ),
+    "又出现了 `if (CONTENT_SOURCE !== \"db\") return NextResponse.next();` 的提前 return —— " +
+      "这是 markdown 软 404 的原形，必须保持「先检查再 next()」的块结构",
+  );
+});
+
+test("P7-R10：markdown 探针的判据必须与页面层一致（draft / 标签口径）", () => {
+  // ① 生产环境必须过滤 draft —— 页面层是靠 `readAllParsedPosts()` 里的
+  //    `.filter(post => !post.meta.draft)`，探针若不判 draft，
+  //    草稿 URL 会被 proxy 判「存在」，然后页面 404 → 又是一次不一致。
+  assert.match(
+    MARKDOWN_PROBE_SOURCE,
+    /data\.draft\s*===\s*true/,
+    "markdown 探针没有按 `draft: true` 过滤 —— 生产环境下草稿 URL 会被误判为存在",
+  );
+
+  // ② 标签必须走同一个归一化函数，否则「LLM」与「llm」会被当成两个标签。
+  assert.match(
+    MARKDOWN_PROBE_SOURCE,
+    /tagSlugOfName\s*\(/,
+    "markdown 探针没有复用 tagSlugOfName —— 标签判据会与页面层分叉",
+  );
+  assert.match(
+    MARKDOWN_PROBE_SOURCE,
+    /decodeTagParam\s*\(/,
+    "markdown 探针没有复用 decodeTagParam —— 裸 `+` 会被当成字面加号",
+  );
+
+  // ③ 只统计 blog（与 `getAllTags()` 一致：它遍历的是 `getAllPostsCached()`）。
+  assert.match(
+    MARKDOWN_PROBE_SOURCE,
+    /slugsByKind\(\)\.get\("blog"\)/,
+    "markdown 探针统计标签时没有限定 blog —— 与 getAllTags() 的口径不一致",
+  );
+
+  // ④ 不许引入 markdown 渲染管线（proxy 每请求都跑，不该把 Shiki 拖进模块图）。
+  assert.ok(
+    !/@loxander\/markdown/.test(MARKDOWN_PROBE_SOURCE),
+    "markdown 探针导入了 @loxander/markdown —— 会把 Shiki 与 unified 整套管线拖进 proxy 的模块图",
+  );
+});
+
+test("P7-R11：四个旧 lib 的内容目录必须走 app-root，不许用 process.cwd()", () => {
+  /**
+   * 背景（实测）：`next start` 下 `process.cwd()` 是**仓库根**而不是 `apps/web`：
+   * ```
+   * process.cwd()                  = ...\loxander-platform
+   * cwd/content/blog 存在           = false
+   * cwd/apps/web/content/blog 存在  = true
+   * ```
+   * 于是 markdown 源的 `/search?q=markdown` 返回 0 篇（正确是 2 篇）。
+   * 预渲染页面掩盖了这个问题，只有请求时渲染的路径会塌。
+   */
+  const libs = ["posts.ts", "diary.ts", "goals.ts", "projects.ts"];
+
+  for (const lib of libs) {
+    const source = stripComments(
+      readFileSync(resolvePath(SRC_DIR, "lib", lib), "utf8"),
+    );
+
+    assert.ok(
+      !/path\.join\(\s*process\.cwd\(\)\s*,\s*"content"/.test(source),
+      `${lib} 又用 process.cwd() 拼内容目录了 —— 生产启动时 cwd 是仓库根，会读不到任何内容`,
+    );
+    assert.match(
+      source,
+      /contentDir\s*\(/,
+      `${lib} 没有走 app-root 的 contentDir()`,
+    );
+  }
 });

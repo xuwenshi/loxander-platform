@@ -5,6 +5,7 @@ import matter from "gray-matter";
 import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 
 import { parseOrThrow } from "./parse-entry";
+import { contentDir } from "./app-root";
 import type { DiaryEntry, DiaryMeta } from "@/types";
 
 /**
@@ -19,7 +20,8 @@ import type { DiaryEntry, DiaryMeta } from "@/types";
  * `2026-10-12xyz` 也能通过；content-core 的 `zDate` 两端锚定，这类脏值会被拦住。
  */
 
-const DIARY_DIR = path.join(process.cwd(), "content", "diary");
+/** 见 `lib/app-root.ts`：不能用 `process.cwd()`，生产启动时它是仓库根。 */
+const DIARY_DIR = contentDir("diary");
 
 /** 开发环境显示草稿，生产环境隐藏 */
 const includeDrafts = process.env.NODE_ENV !== "production";

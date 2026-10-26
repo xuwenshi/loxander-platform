@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { parseProbeablePath, NOT_FOUND_PATH, type PageProbe } from "@/lib/proxy-rules";
+import { markdownProbeExists } from "@/lib/proxy-markdown-probe";
 import { decodeTagParam, tagSlugOfName } from "@/lib/tag-url";
 
 /**
@@ -123,32 +124,91 @@ interface RedirectRow {
   status_code: number;
 }
 
+/* -------------------------------------------------------------------------- */
+/* 数据库连接（进程内复用已解析实例）                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 建连函数的最小类型（只用到这一个成员）。
+ *
+ * 不引 `postgres` 的类型：那个包只在 `CONTENT_SOURCE=db` 时才动态 import，
+ * 提到类型层会让 `markdown` 部署也把它的 `.d.ts` 拉进编译图。
+ */
+type SqlClient = {
+  <T = Record<string, unknown>>(strings: TemplateStringsArray, ...args: unknown[]): Promise<T[]>;
+  end: (options?: { timeout?: number }) => Promise<void>;
+};
+
+/**
+ * 已解析的连接实例（**不是 Promise**）。
+ *
+ * ── 为什么要复用 ────────────────────────────────────────────────────
+ * P7 收口时用真实浏览器验收发现详情页要 3–5 秒。逐步测量后定位到：本文件
+ * 曾经在 `lookupRedirect` 与 `probePageExists` 里**各自新建一条 postgres 连接**
+ * 并在 `finally` 里立刻关掉。Neon 冷建连实测 3 362ms（`.tmp-p7-dbperf.mjs`），
+ * 所以每个详情页请求都要白付一次建连成本 —— 而 proxy 跑在每个请求前。
+ *
+ * 复用之后同一条连接在进程内长期存活，`max: 1` 的池子只建一次。
+ *
+ * ── 为什么缓存「实例」而不是「Promise」（与 `lib/sources/db.ts` 同源教训）
+ * P6 期那个真实缺陷：模块作用域缓存 Promise，被 `"use cache"` 作用域跨域 await
+ * 时报「A `"use cache"` function is awaiting a promise created outside it」。
+ * proxy 里虽然没有 `"use cache"`，但保持同一写法，避免将来有人把这段代码
+ * 搬进带缓存的作用域时再踩一次。
+ *
+ * ── 什么时候该关 ────────────────────────────────────────────────────
+ * proxy 是长驻进程，不需要在请求结束时关连接。热重载 / 进程退出时由 Node 回收。
+ * 这里不提供 close 钩子：**proxy 模块不该在请求生命周期里管理连接池**。
+ */
+let cachedClient: SqlClient | undefined;
+
+/**
+ * 取（或建）proxy 用的数据库连接。
+ *
+ * 返回 `null` 表示「没法查」（没配 `DATABASE_URL`），调用方按各自的失败策略处理：
+ * - `lookupRedirect` → 当作「没有重定向」，放行
+ * - `probePageExists` → 返回 `null`（无法判定），放行
+ *
+ * 建连的 Promise 由**本次调用自己创建**，不挂在模块作用域上（见 `cachedClient` 注释）。
+ */
+async function getClient(): Promise<SqlClient | null> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return null;
+  if (cachedClient) return cachedClient;
+
+  const { default: postgres } = await import("postgres");
+  const created = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 5 }) as unknown as SqlClient;
+
+  // 并发首达：别人先装上了就关掉自己这条，避免池子泄漏（与 `lib/sources/db.ts:getDb()` 同构）。
+  if (cachedClient) {
+    await created.end({ timeout: 1 }).catch(() => {});
+    return cachedClient;
+  }
+
+  cachedClient = created;
+  return cachedClient;
+}
+
 /**
  * 按 `source_path` 查一条重定向。
  *
  * 这里刻意**不复用** `lib/sources/db.ts` 的连接：那个模块带 `server-only`
  * 与整套 drizzle schema 依赖，而 Proxy 需要尽可能轻（它在每个请求前都跑）。
  * 用 postgres-js 直连一条参数化 SQL，是这里能拿到的最小实现。
+ *
+ * 连接复用见 `getClient()` —— 早先每次新建，导致每个详情页请求多付 3.4 秒建连。
  */
 async function lookupRedirect(pathname: string): Promise<RedirectRow | null> {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
+  const client = await getClient();
+  if (client === null) return null;
 
-  const { default: postgres } = await import("postgres");
-  const client = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 5 });
-
-  try {
-    const rows = await client<RedirectRow[]>`
-      select target_path, status_code
-      from redirects
-      where source_path = ${pathname}
-      limit 1
-    `;
-    return rows[0] ?? null;
-  } finally {
-    // Proxy 是无状态的一次性执行，必须自己关连接，否则每次请求都泄漏一个。
-    await client.end({ timeout: 1 }).catch(() => {});
-  }
+  const rows = await client<RedirectRow>`
+    select target_path, status_code
+    from redirects
+    where source_path = ${pathname}
+    limit 1
+  `;
+  return rows[0] ?? null;
 }
 
 /** 给查库整体套一个超时，避免慢查询把页面响应一起拖垮。 */
@@ -204,59 +264,53 @@ async function lookupWithTimeout(pathname: string): Promise<RedirectRow | null> 
  * 代价是「库挂了的时候软 404 会回来」——这比整站 500 好得多。
  */
 async function probePageExists(probe: PageProbe): Promise<boolean | null> {
-  const url = process.env.DATABASE_URL;
-  if (!url) return null;
-
   // 与页面层同一条可见性判据（`lib/sources/db.ts` 的 `includeDrafts`）：
   // 生产只认 published；非生产把草稿也算「存在」，否则本地看草稿会被这里误杀。
   const publishedOnly = process.env.NODE_ENV === "production";
 
-  const { default: postgres } = await import("postgres");
-  const client = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 5 });
+  const client = await getClient();
+  // 没配 DATABASE_URL → 无法判定，交给页面自己 notFound()。
+  if (client === null) return null;
 
-  try {
-    if (probe.kind === "tag") {
-      // 标签页的「存在」判据与 `getPostsByTag()` 一致：这个标签下**至少有一篇可见文章**。
-      // 只查 `tags` 表会漏掉「标签建了但文章全删了」的空页面 —— 那种页面在
-      // `app/(site)/tags/[tag]/page.tsx` 里会走 `notFound()`，这里必须同样判空。
-      const tagSlug = tagSlugOfName(decodeTagParam(probe.value));
-      if (!tagSlug) return false;
+  if (probe.kind === "tag") {
+    // 标签页的「存在」判据与 `getPostsByTag()` 一致：这个标签下**至少有一篇可见文章**。
+    // 只查 `tags` 表会漏掉「标签建了但文章全删了」的空页面 —— 那种页面在
+    // `app/(site)/tags/[tag]/page.tsx` 里会走 `notFound()`，这里必须同样判空。
+    const tagSlug = tagSlugOfName(decodeTagParam(probe.value));
+    if (!tagSlug) return false;
 
-      // ⚠️ 必须 `lower(t.name)` 而不是 `t.slug`，且必须带 `e.kind = 'blog'` + 可见性过滤。
-      //
-      // 判据必须与页面**完全一致**：`app/(site)/tags/[tag]/page.tsx:78-79` 是
-      // `tags.find(({ tag: name }) => tagSlugOfName(name) === param)`，而那个 `tags`
-      // 来自 `getAllTags()` —— 它的实现是遍历 `getAllPostsCached()` 的 `post.tags`，
-      // 而 `post.tags` 由 `loadTagNamesOf()` 从 **`tags.name`** 填充（不是 `tags.slug`，
-      // `db/mapping.ts` 的 `tagSlugOf()` 是恒等函数，slug 存的是原文）。
-      // 所以 URL 段对应的永远是**标签名**，且只统计**可见文章**上的标签。
-      // 若这里改用 `t.slug` 或去掉 entries 过滤，就会出现「proxy 说有、页面 404」
-      // 或反过来的错配。
-      const rows = await client<{ one: number }[]>`
-        select 1 as one
-        from tags t
-        join entry_tags et on et.tag_id = t.id
-        join entries e on e.id = et.entry_id
-        where lower(t.name) = ${tagSlug}
-          and e.kind = 'blog'
-          ${publishedOnly ? client`and e.publish_status = 'published'` : client``}
-        limit 1
-      `;
-      return rows.length > 0;
-    }
-
-    const rows = await client<{ one: number }[]>`
+    // ⚠️ 必须 `lower(t.name)` 而不是 `t.slug`，且必须带 `e.kind = 'blog'` + 可见性过滤。
+    //
+    // 判据必须与页面**完全一致**：`app/(site)/tags/[tag]/page.tsx:78-79` 是
+    // `tags.find(({ tag: name }) => tagSlugOfName(name) === param)`，而那个 `tags`
+    // 来自 `getAllTags()` —— 它的实现是遍历 `getAllPostsCached()` 的 `post.tags`，
+    // 而 `post.tags` 由 `loadTagNamesOf()` 从 **`tags.name`** 填充（不是 `tags.slug`，
+    // `db/mapping.ts` 的 `tagSlugOf()` 是恒等函数，slug 存的是原文）。
+    // 所以 URL 段对应的永远是**标签名**，且只统计**可见文章**上的标签。
+    // 若这里改用 `t.slug` 或去掉 entries 过滤，就会出现「proxy 说有、页面 404」
+    // 或反过来的错配。
+    const rows = await client<{ one: number }>`
       select 1 as one
-      from entries
-      where kind = ${probe.contentType ?? ""}
-        and slug = ${probe.value}
-        ${publishedOnly ? client`and publish_status = 'published'` : client``}
+      from tags t
+      join entry_tags et on et.tag_id = t.id
+      join entries e on e.id = et.entry_id
+      where lower(t.name) = ${tagSlug}
+        and e.kind = 'blog'
+        ${publishedOnly ? client`and e.publish_status = 'published'` : client``}
       limit 1
     `;
     return rows.length > 0;
-  } finally {
-    await client.end({ timeout: 1 }).catch(() => {});
   }
+
+  const rows = await client<{ one: number }>`
+    select 1 as one
+    from entries
+    where kind = ${probe.contentType ?? ""}
+      and slug = ${probe.value}
+      ${publishedOnly ? client`and publish_status = 'published'` : client``}
+    limit 1
+  `;
+  return rows.length > 0;
 }
 
 /**
@@ -307,8 +361,22 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL(staticTarget, request.url), 301);
   }
 
-  // markdown 源下不连库（见文件头）。
-  if (process.env.CONTENT_SOURCE !== "db") return NextResponse.next();
+  // markdown 源：不连库（见文件头），但**存在性检查照样要做** ——
+  // 否则回滚到 markdown 时软 404 全回来（方案 §16.2 把 markdown 定义为回滚通道）。
+  if (process.env.CONTENT_SOURCE !== "db") {
+    const mdProbe = parseProbeablePath(pathname);
+    if (mdProbe !== null) {
+      let exists = true;
+      try {
+        exists = markdownProbeExists(mdProbe);
+      } catch (error) {
+        // 与 db 路径同一套失败策略：判不了就放行，不能把站点变成 500。
+        console.error("[proxy] markdown 存在性检查失败，本次请求放行：", error);
+      }
+      if (!exists) return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url));
+    }
+    return NextResponse.next();
+  }
 
   try {
     // 先看是不是旧链接：命中就 301，比存在性检查更优先

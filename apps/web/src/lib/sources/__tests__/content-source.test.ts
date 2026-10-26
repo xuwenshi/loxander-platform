@@ -440,15 +440,20 @@ test("markdown 实现：不存在的 slug 返回 null / 空数组，与 lib 一�
 /* 3. db 实现：行 → 站点类型的纯映射（不需要数据库）                             */
 /* -------------------------------------------------------------------------- */
 
-/** 一行最小 entry（只保留本组测试关心的列）。 */
+/**
+ * 一行最小 entry（只保留本组测试关心的列）。
+ *
+ * 注意这里**没有 `body_html`** —— `EntryRow` 刻意不声明它（读路径一律从
+ * `body_md` 重渲染，见 `sources/db.ts` 里 `EntryRow` 的注释）。
+ */
 function row(overrides: Record<string, unknown> = {}) {
   return {
+    id: "11111111-1111-4111-8111-111111111111",
     kind: "blog",
     slug: "sample",
     title: "标题",
     summary: "摘要",
     body_md: "正文",
-    body_html: null,
     publish_status: "published",
     featured: false,
     sort_order: 999,

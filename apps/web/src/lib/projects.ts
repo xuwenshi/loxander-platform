@@ -6,6 +6,7 @@ import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 
 import { getBlogSlugs } from "./posts";
 import { parseOrThrow } from "./parse-entry";
+import { contentDir } from "./app-root";
 import type { Project, ProjectMeta } from "@/types";
 
 /**
@@ -15,7 +16,8 @@ import type { Project, ProjectMeta } from "@/types";
  * Markdown 渲染交给 `@loxander/markdown` —— 与站点、桌面端同一份实现。
  */
 
-const PROJECTS_DIR = path.join(process.cwd(), "content", "projects");
+/** 见 `lib/app-root.ts`：不能用 `process.cwd()`，生产启动时它是仓库根。 */
+const PROJECTS_DIR = contentDir("projects");
 
 function listProjectFiles(): string[] {
   if (!fs.existsSync(PROJECTS_DIR)) return [];

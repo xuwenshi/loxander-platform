@@ -34,6 +34,7 @@ import { Buffer } from "node:buffer";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { publicPath } from "../app-root";
 import type { ImageMimeType } from "./image-info";
 
 /** `putImage` 的返回值。字段与 `media` 表的列一一对应（顺序也一致）。 */
@@ -54,15 +55,17 @@ const BLOB_TOKEN_ENV = "BLOB_READ_WRITE_TOKEN";
 /**
  * 本地兜底的根目录与允许写入的前缀。
  *
- * `process.cwd()` 在 Next 的 server runtime 里就是应用根（本仓库是 `apps/web`），
- * 所以这里解析成 `apps/web/public`。刻意**不**用 `import.meta.url` 推算：
- * 打包后模块位置会被 Turbopack 改写，而 `cwd` 是 Next 明确保证的。
+ * **不能用 `path.join(process.cwd(), "public")`**：实测 `next start` 下
+ * `process.cwd()` 是仓库根（`loxander-platform`）而不是 `apps/web`，
+ * 那样本地兜底会把图片写到 `loxander-platform/public/media/...`，
+ * 站点的静态文件服务根本不会去那里找。改用 `lib/app-root.ts` 解析出的
+ * 应用根，它在「cwd 是应用根」与「cwd 是仓库根」两种部署下都正确。
  *
  * pathname 一律以 `media/` 开头（`media/<yyyy>/<mm>/<filename>`），于是
  * 本地绝对路径 = `public/` + pathname，本地 URL = `/` + pathname，
  * **path 与 url 只差一个前导斜杠**。这让引用匹配只需要一套逻辑。
  */
-const LOCAL_PUBLIC_ROOT = path.join(process.cwd(), "public");
+const LOCAL_PUBLIC_ROOT = publicPath("");
 
 /** 媒体允许落盘的目录（`public/media`）。`deleteImage` 的前缀校验以它为界。 */
 const LOCAL_MEDIA_ROOT = path.join(LOCAL_PUBLIC_ROOT, "media");

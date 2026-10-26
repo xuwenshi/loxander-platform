@@ -203,7 +203,30 @@ export async function closeDbContentSourceConnection(): Promise<void> {
 /* 行类型与基础读取                                                            */
 /* -------------------------------------------------------------------------- */
 
-/** `entries` 表的一行（只声明本文件用到的列）。 */
+/**
+ * `entries` 表的一行（只声明本文件用到的列）。
+ *
+ * ── 为什么**没有** `body_html` ────────────────────────────────────────
+ * 本文件的读路径一律从 `body_md` 重渲染（见 `renderBody`），从不读 `body_html` 列。
+ * 但 `db.select()` 不带列名时会把**全部列**取回来，而 `body_html` 是这份数据里
+ * 最宽的一列 —— 实测（2026-10-25，Neon 主分支 10 行数据）：
+ *
+ *   body_md   合计  24 051 B
+ *   body_html 合计 132 042 B   ← 5.5 倍，单行最大 34 874 B
+ *
+ * 于是 `/search` 与 `/tags/[tag]` 每次请求都要白拉 132 KB 再丢掉。
+ * 同一台机器实测同一查询（kind='blog' 的 4 行）：
+ *
+ *   select * from entries where kind='blog'            11 069 ms
+ *   显式列（不含 body_html）                            1 316 ms
+ *
+ * 差 8.4 倍。这是 P7 收口时 `/search` 要 5–10 秒才出结果的直接原因：
+ * `searchPosts` 走 `loadRows("blog")`，而搜索按方案 §14.2 是「动态查询」、
+ * 刻意不套 `"use cache"`，所以每次请求都付这笔钱。
+ *
+ * 因此：**`loadRows` 必须显式列名，不要退回无参 `db.select()`**。
+ * `p7-wiring.test.ts` 有一条断言守着这件事。
+ */
 export type EntryRow = {
   /** 主键；读标签关系时要用。 */
   id: string;
@@ -212,7 +235,6 @@ export type EntryRow = {
   title: string;
   summary: string;
   body_md: string;
-  body_html: string | null;
   publish_status: string;
   featured: boolean;
   sort_order: number;
@@ -242,6 +264,10 @@ function visibleOnly() {
 /**
  * 取某一分区的全部可见行（未排序，排序交给调用方的复刻比较器）。
  *
+ * **列必须显式列出**（不写 `db.select()`）：`body_html` 是最宽的一列
+ * （实测合计 132 042 B，而 `body_md` 只有 24 051 B），而本文件从不读它 ——
+ * 见 `EntryRow` 的注释与实测耗时（11 069 ms vs 1 316 ms）。
+ *
  * **标签**：`entries` 表没有 tags 列，标签在 `tags` + `entry_tags` 两张关系表里。
  * 这里在拿到行之后**一次性批量**补 `tags`（而不是留给 `toPostMeta` 逐行查），
  * 原因有二：
@@ -261,7 +287,23 @@ async function loadRows(kind: "blog" | "diary" | "projects" | "goals", options?:
       ? and(eq(entries.kind, kind), visibleOnly())
       : eq(entries.kind, kind);
 
-  const rows = (await db.select().from(entries).where(where)) as unknown as EntryRow[];
+  const rows = (await db
+    .select({
+      id: entries.id,
+      kind: entries.kind,
+      slug: entries.slug,
+      title: entries.title,
+      summary: entries.summary,
+      body_md: entries.body_md,
+      publish_status: entries.publish_status,
+      featured: entries.featured,
+      sort_order: entries.sort_order,
+      published_at: entries.published_at,
+      display_date: entries.display_date,
+      data: entries.data,
+    })
+    .from(entries)
+    .where(where)) as unknown as EntryRow[];
 
   // 只有 blog / diary 有 tags（`lib/posts.ts:82` / `lib/diary.ts:52`）；
   // projects / goals 的 `ProjectMeta` / `Goal` 没有这个字段，省掉一次查询。

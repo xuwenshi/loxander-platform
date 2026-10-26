@@ -5,6 +5,7 @@ import matter from "gray-matter";
 import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 
 import { parseOrThrow } from "./parse-entry";
+import { contentDir } from "./app-root";
 import type { Goal, GoalMilestone } from "@/types";
 
 /**
@@ -22,7 +23,8 @@ import type { Goal, GoalMilestone } from "@/types";
  *   现在按 desktop 的 `Number()` 语义强转。
  */
 
-const GOALS_DIR = path.join(process.cwd(), "content", "goals");
+/** 见 `lib/app-root.ts`：不能用 `process.cwd()`，生产启动时它是仓库根。 */
+const GOALS_DIR = contentDir("goals");
 
 function listGoalFiles(): string[] {
   if (!fs.existsSync(GOALS_DIR)) return [];

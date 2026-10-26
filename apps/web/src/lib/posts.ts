@@ -4,6 +4,7 @@ import matter from "gray-matter";
 
 import { extractHeadings, renderMarkdown } from "@loxander/markdown";
 
+import { contentDir, publicPath } from "./app-root";
 import { parseOrThrow } from "./parse-entry";
 import type { SearchDoc } from "./search";
 import { tagMatches } from "./tag-url";
@@ -21,7 +22,12 @@ import type { Post, PostMeta, TagCount } from "@/types";
  * - 估算阅读时间
  */
 
-const BLOG_DIR = path.join(process.cwd(), "content", "blog");
+/**
+ * 内容目录。**不要改回 `path.join(process.cwd(), "content", "blog")`**：
+ * 生产启动时 cwd 是仓库根而不是 `apps/web`，那样会读不到任何文章
+ * （详见 `lib/app-root.ts` 文件头记录的实测证据）。
+ */
+const BLOG_DIR = contentDir("blog");
 
 /** 生产构建时隐藏 draft: true 的文章 */
 const includeDrafts = process.env.NODE_ENV !== "production";
@@ -58,7 +64,7 @@ function readCoverDimensions(
 ): { width: number; height: number } | null {
   if (!cover || !COVER_PATTERN.test(cover)) return null;
 
-  const filePath = path.join(process.cwd(), "public", cover);
+  const filePath = publicPath(cover);
   if (!fs.existsSync(filePath)) return null;
 
   // 只读开头一段：<svg> 开标签一定在最前面，没必要读整个文件
@@ -109,8 +115,7 @@ function parsePostFile(file: string): ParsedPost {
   // 校验交给 content-core：字段归一（trim / tags 去重 / 日期双分支）都在那里，
   // 这里拿到的已经是可直接渲染的强类型对象。
   const entry = parseOrThrow("blog", data, file, {
-    publicFileExists: (relativePath) =>
-      fs.existsSync(path.join(process.cwd(), "public", relativePath)),
+    publicFileExists: (relativePath) => fs.existsSync(publicPath(relativePath)),
   });
 
   const coverDimensions = readCoverDimensions(entry.cover);
