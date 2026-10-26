@@ -263,7 +263,10 @@ export const useCms = create<CmsState>((set, get) => {
   previewPort: 3210,
   previewReloadToken: 0,
   previewLogs: '',
-  autoPublish: true,
+  // 与 `apps/desktop/src/main/services/settingsService.ts` 的 FALLBACK.autoPublish 保持一致：
+  // P8 旧链路下线后默认关闭。这里只是首帧占位值，`bootstrap()` 会立刻用主进程下发的真实设置覆盖它；
+  // 改成 false 是为了在覆盖到来之前不显示「自动发布已开启」这种误导性的初始状态。
+  autoPublish: false,
   autoPublishLast: null,
 
   async bootstrap() {
@@ -308,7 +311,9 @@ export const useCms = create<CmsState>((set, get) => {
       colorScheme,
       sidebarCollapsed: settingsRes.ok ? settingsRes.data.sidebarCollapsed : false,
       editorLayout: settingsRes.ok ? settingsRes.data.editorLayout : 'split',
-      autoPublish: settingsRes.ok ? settingsRes.data.autoPublish : true,
+      // 读设置失败时退到 false，与 FALLBACK.autoPublish 同口径：
+      // 读不到设置就默认「关」，绝不让界面显示「已开启自动发布」却在后台往旧仓库推提交。
+      autoPublish: settingsRes.ok ? settingsRes.data.autoPublish : false,
       previewPort: settingsRes.ok ? settingsRes.data.previewPort : 3210,
       busy: false,
       status: `已加载 ${sections.reduce((sum, item) => sum + item.count, 0)} 篇内容`

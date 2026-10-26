@@ -93,9 +93,22 @@ const FALLBACK: Omit<Settings, 'workspaceRoot'> = {
   sidebarCollapsed: false,
   editorLayout: 'split',
   groups: emptyGroupStore(),
-  // 本地实时预览 + 线上自动发布：默认开启
-  autoPublish: true,
+  // 线上自动发布：**默认关闭**（P8 旧链路下线，2026-10-26）
+  //
+  // 为什么改默认值而不是删掉功能：
+  //   这条链路的语义是「保存 md → git add/commit → push origin main → Vercel 按 Git 集成自动部署」，
+  //   它服务的是旧架构（markdown 是唯一真源、Git 触发发布）。新平台的真源是 Neon 数据库，
+  //   发布通道是 `/admin` 的 Server Action + `updateTag`，与 Git 无关。
+  //   保留代码是为了「必要时仍可回旧链路」这条退路（P8 验收要求「回滚文档仍可执行」），
+  //   但默认值必须是关 —— 否则装完就用的人会以为是新平台在发布，实际推的是旧仓库旧项目。
+  //
+  // 旧链路的三段（`autoPublishService` 的 debounce → `gitService` 的 commitFiles/push
+  // → 旧 Vercel 项目按 Git 自动部署）中，第三段已于 2026-10-26 用
+  // `DELETE /v9/projects/{旧项目}/link` 断开，所以即使误开也推不上线；
+  // 但第一、二段仍会往旧仓库写提交，故默认值同样要关。
+  autoPublish: false,
   autoPublishDebounceMs: 4000,
+  // 本地实时预览仍默认开启：纯本机行为，不写远端，对「新平台唯一入口」没有威胁。
   previewAutoStart: true,
   previewPort: 3210,
   nodePath: ''

@@ -51,7 +51,7 @@ export default function PublishPanel({ onBack }: { onBack: () => void }) {
         <div className="doc-actions">
           <label
             className="auto-switch"
-            title="内容保存后自动「预检 → 提交 → 推送 → 回读部署」，上线需 1–3 分钟"
+            title="旧链路（保存后自动「预检 → 提交 → 推送旧仓库」）已下线，默认关闭。新平台的发布请用 /admin；若确需回旧链路，可手动勾选，但推送的那一端已断开，不会上线。"
           >
             <input
               type="checkbox"

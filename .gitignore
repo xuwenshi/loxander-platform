@@ -28,6 +28,13 @@ coverage/
 # 需要长期留存的话应该放对象存储，不是 git。
 backups/
 
+# Markdown 导出产物
+# content-export/ 是 `npm run export:md` 从数据库反向导出的 markdown。
+# 与 backups/ 同理：它是**运行时快照**，每次跑都生成新时间戳目录，
+# 内容与 `apps/web/content/` 高度重合（后者才是进版本库的那份）。
+# 把它提交进去会让「同一份内容在仓库里存两遍」，改一次要改两处。
+content-export/
+
 # 临时探针与浏览器调试数据
 # .tmp-* 是本机沙箱下跑浏览器验收/探针时产生的临时文件。
 # .tmp-edge-cdp/ 是 Edge 的用户数据目录，进程存活期间其中的文件被独占
