@@ -24,6 +24,8 @@
  * `packages/content-core` 的 `cover` 校验只认 `.svg`），先不做。
  */
 
+import { checkSvgSafety } from "./svg-safety";
+
 /** 支持的图片类型（MIME）。 */
 export type ImageMimeType = "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "image/svg+xml";
 
@@ -261,6 +263,22 @@ export function sniffImage(bytes: Uint8Array): ImageInfo {
       /<svg[\s>]/i.test(head) ||
       (/^\uFEFF?\s*<\?xml/i.test(head) && /svg/i.test(head));
     if (looksLikeSvg) {
+      /*
+        安全检查放在尺寸解析**之前**，且检查的是**全部字节**。
+
+        这是方案 §13.3「拒绝 SVG 中的脚本」的落地点。位置很关键：
+        放在 `sniffImage` 里而不是 `uploadMediaAction` 里，意味着任何走
+        「嗅探 → 存储」的上传路径都自动被覆盖，未来新增的调用方不会漏。
+        检查全部字节而不是复用上面的 4 KB `head`，因为把 `<script>` 放在
+        第 5001 字节就能绕过只查头部的实现。
+
+        抛 `UnsupportedImageError` 而不是返回标志位：调用方已经有一个
+        「文件不支持」的错误分支，复用它比新增一个分支更不容易被漏处理。
+      */
+      const safety = checkSvgSafety(bytes);
+      if (!safety.safe) {
+        throw new UnsupportedImageError(safety.reason);
+      }
       // 尺寸在根元素上，需要完整的开标签；4 KB 足够容纳任何正常 SVG 的根标签。
       const full = bytes.length <= 4096 ? head : new TextDecoder("utf-8").decode(bytes.subarray(0, 4096));
       return { mimeType: "image/svg+xml", ...svgSize(full) };
