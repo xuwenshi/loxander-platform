@@ -21,6 +21,14 @@ dist-electron/
 # 测试与覆盖率
 coverage/
 
+# 临时探针与浏览器调试数据
+# .tmp-* 是本机沙箱下跑浏览器验收/探针时产生的临时文件。
+# .tmp-edge-cdp/ 是 Edge 的用户数据目录，进程存活期间其中的文件被独占
+# （lockfile、Nested\campaign_history 等），Windows 下删不掉；
+# 它只在本机存在，绝不能进版本库，所以用忽略规则兜住而不是靠删除。
+.tmp-*
+.mutbak*
+
 # 本地缓存与日志
 .npmcache/
 .esbuild-tmp/
