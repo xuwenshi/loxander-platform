@@ -32,6 +32,9 @@
     "db:test": "node --test-isolation=none db/verify.test.ts && node --test-isolation=none db/mapping.test.ts",
     "db:compare": "node db/compare.ts",
     "check:css": "node scripts/check-css-completeness.mjs",
+    "db:backup": "node scripts/db-backup.mjs dump",
+    "db:restore": "node scripts/db-backup.mjs restore",
+    "db:restore:drill": "node scripts/db-restore-drill.mjs",
     "test:browser": "node scripts/browser-acceptance.mjs",
     "test:rollback": "node scripts/rollback-drill-all.mjs",
     "preflight": "node scripts/preflight.mjs",
@@ -45,6 +48,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.2",
     "drizzle-orm": "^0.45.4",
     "jsdom": "^30.1.3",

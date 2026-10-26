@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 
 import CosmicTransitionProvider from "@/components/cosmic/TransitionProvider";
 import CosmicTransitionOverlay from "@/components/cosmic/TransitionOverlay";
@@ -172,6 +173,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
+
+        {/*
+          Vercel Web Analytics（方案 §15.1「必须监控」的运行时侧）。
+          它只在 Vercel 平台上真正上报：本地 `next start` 时脚本会被注入但
+          没有 /_vercel/insights 端点，请求静默失败，不影响任何页面行为。
+          刻意不传任何参数 —— `mode`/`debug` 只在排查时用，生产默认值就是对的。
+        */}
+        <Analytics />
       </body>
     </html>
   );
