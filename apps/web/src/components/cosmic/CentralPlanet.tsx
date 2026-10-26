@@ -282,11 +282,16 @@ export default function CentralPlanet() {
     };
   }, [reducedMotion]);
 
+  // 可访问名不能只用 aria-label：WCAG 2.5.3（Label in Name）要求可访问名必须
+  // 包含可见文字。这一卡片的可见文字是两行（「进入我的宇宙」+「Enter the
+  // universe」），而原来的 aria-label 只覆盖了第一行，Lighthouse 的
+  // label-content-name-mismatch（axe 规则，impact=serious）因此判 0 分。
+  // 改成「让可见文字自己成为可访问名 + sr-only 补足去向说明」：
+  // 名字由内容算出 = 两行可见文字 + 隐藏说明，天然包含可见文字。
   return (
     <CosmicLink
       href="/universe"
       variant="warp"
-      aria-label="进入我的宇宙：查看简历、项目、文章、日记、目标五大行星分区"
       className="group flex flex-col items-center gap-7 rounded-3xl sm:gap-9"
     >
       {/* 星球视觉区：CSS 底衬 + Canvas */}
@@ -322,6 +327,11 @@ export default function CentralPlanet() {
         <span className="text-xs font-medium uppercase tracking-[0.28em] text-cosmic-muted transition-colors group-hover:text-cosmic-ice group-focus-visible:text-cosmic-ice">
           Enter the universe
         </span>
+        {/* 去向说明用 sr-only 挂在内容里，而不是用 aria-label 覆盖：
+            aria-label 会整体替换可访问名，一旦与可见文字不一致就违反 WCAG 2.5.3
+            （语音控制用户喊可见文字时点不到）。挂在内容里则「可见文字 + 说明」
+            一起构成可访问名，天然满足「包含可见文字」。 */}
+        <span className="sr-only">：查看简历、项目、文章、日记、目标五大行星分区</span>
       </span>
     </CosmicLink>
   );
