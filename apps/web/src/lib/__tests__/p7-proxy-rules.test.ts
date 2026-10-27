@@ -649,3 +649,85 @@ test("P7-R11：四个旧 lib 的内容目录必须走 app-root，不许用 proce
     );
   }
 });
+
+test("P7-R12：运维台单表页的表不存在判定必须在 proxy 里做（/admin 下 notFound() 回 200）", () => {
+  /**
+   * ── 守的是 P7 软 404 在 /admin 子树里的复发形态 ────────────────────
+   * 实测（同一次构建、同一个探针页、受控对照）：
+   * ```
+   * FAIL /admin/ops/probe404?mode=outside  页面顶层 notFound  期望404 实际200
+   * FAIL /admin/ops/probe404?mode=inside   Suspense 内       期望404 实际200
+   * PASS /blog/<随机 slug>                 (site) 子树       期望404 实际404
+   * ```
+   * 根因是 `app/admin/layout.tsx` 必须声明 `export const instant = false`：
+   * 去掉它构建直接失败，两种报错都实测过 ——
+   * 保留 layout 的 `<Suspense>` 时报
+   * `Next.js encountered URL data usePathname() in a Client Component outside of <Suspense>`
+   * （`/admin/content/[kind]/[slug]`）；去掉 `<Suspense>` 时报
+   * `Next.js encountered uncached or runtime data during prerendering`（`/admin/content`）。
+   *
+   * 而 `instant = false` 同时关掉了「即时导航校验」与「静态外壳校验」
+   * （`.../03-file-segment-config/instant.md`），副作用就是这棵子树里
+   * `notFound()` 在 HTTP 层退化成 200 —— 页面正文是 404 页，状态码是 200，
+   * 与 P8 在 Vercel 边缘踩的软 404 同族。
+   *
+   * 所以状态码必须在 proxy 里定死（`resolve-routes.js:377`
+   * `res.statusCode = middlewareRes.status;`）。这条断言守两件事：
+   * ①proxy 真的对 `/admin/ops/db/<table>` 做了存在性检查并 rewrite 成 404
+   * ②该检查的失败策略仍是「判不了就放行」，不能把库连不上变成后台全 404。
+   */
+  assert.match(
+    PROXY_SOURCE,
+    /OPS_TABLE_PREFIX\s*=\s*["']\/admin\/ops\/db\/["']/,
+    "proxy.ts 里没有 /admin/ops/db/ 前缀常量 —— 运维台单表页的软 404 会回来",
+  );
+
+  assert.match(
+    PROXY_SOURCE,
+    /parseOpsTablePath\s*\(\s*pathname\s*\)/,
+    "proxy.ts 的 proxy() 没有调用 parseOpsTablePath —— 表不存在时不会真 404",
+  );
+
+  // 必须走 notFoundRewrite（带 status: 404），不许直接 next() 或 redirect。
+  const opsBranch = PROXY_SOURCE.match(
+    /const\s+opsTable\s*=\s*parseOpsTablePath\([^)]*\)[\s\S]{0,400}?\n\s*\}\n/,
+  );
+  assert.ok(opsBranch, "找不到 proxy() 里的运维台分支");
+  assert.match(
+    opsBranch[0],
+    /notFoundRewrite\s*\(\s*request\s*\)/,
+    "运维台分支没有 rewrite 到 404 —— 表不存在时会回 200",
+  );
+
+  // 失败策略：三态，只有明确的 false 才算不存在。
+  assert.match(
+    PROXY_SOURCE,
+    /return\s+result\s*!==\s*false/,
+    "运维台表存在性检查必须三态（只有明确的 false 才算不存在），否则库连不上时后台会全部 404",
+  );
+
+  // 判据必须查 information_schema，且限定 public schema（与 db-schema.ts 的 listTables 一致）。
+  assert.match(
+    PROXY_SOURCE,
+    /from\s+information_schema\.tables/i,
+    "运维台表存在性检查必须查 information_schema.tables",
+  );
+  assert.match(
+    PROXY_SOURCE,
+    /table_schema\s*=\s*'public'/i,
+    "运维台表存在性检查必须限定 table_schema = 'public'（与 listTables 同口径）",
+  );
+
+  // 页面侧的 notFound() 必须保留：无 proxy 直接渲染时仍要有正确语义。
+  const tablePage = stripComments(
+    readFileSync(
+      resolvePath(SRC_DIR, "app", "admin", "ops", "db", "[table]", "page.tsx"),
+      "utf8",
+    ),
+  );
+  assert.match(
+    tablePage,
+    /notFound\s*\(\s*\)/,
+    "单表页的 notFound() 被删了 —— proxy 之外的渲染路径会变成「空白页 + 200」",
+  );
+});

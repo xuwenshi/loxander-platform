@@ -140,6 +140,14 @@ test("P6-A1b 后台路由清单与预期一致", () => {
     .filter((route) => route.startsWith("/admin") || route.startsWith("/login"))
     .sort();
 
+  /*
+    与 P6-A1 同理：这是**契约**，不是现状快照。
+
+    `/admin/ops/**` 六项是「运维台」新增（用户要求「可以管理数据库、web 等等
+    所有项目中出现的功能」）。后台页面多一个少一个都该是一次显式决定 ——
+    每多一个后台页面就多一个需要守卫的入口，漏了守卫等于把库结构、环境变量、
+    运行态暴露给未登录者。所以这里要求严格相等，不允许顺手带过去。
+  */
   assert.deepEqual(
     adminRoutes,
     [
@@ -150,6 +158,14 @@ test("P6-A1b 后台路由清单与预期一致", () => {
       "/admin/content/[kind]/[slug]/revisions",
       "/admin/media",
       "/admin/new",
+      // 运维台。db/[table] 是动态段，表不存在必须由 proxy 判成 404 ——
+      // `/admin/**` 的 `instant = false` 会让页面内 notFound() 回 200（P7-R12）。
+      "/admin/ops",
+      "/admin/ops/checks",
+      "/admin/ops/db",
+      "/admin/ops/db/[table]",
+      "/admin/ops/env",
+      "/admin/ops/runtime",
       "/admin/settings",
       "/login",
     ].sort(),

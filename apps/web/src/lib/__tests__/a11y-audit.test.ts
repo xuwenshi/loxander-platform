@@ -323,8 +323,27 @@ const HEADING_ALLOWLIST: ReadonlyMap<string, string> = new Map([
 /**
  * 展开一个页面文件「会渲染出来的标题层级」。
  *
- * 做法：页面自身的 `<hN>` + 它 import 的**本地组件**里的 `<hN>`，只展开一层。
- * 一层足够，因为本项目所有「渲染标题的公共组件」都是叶子组件
+ * 做法：**layout 链上的 `<hN>`** + 页面自身的 `<hN>` + 页面 import 的
+ * **本地组件**里的 `<hN>`，组件只展开一层。
+ *
+ * ── 为什么必须带上 layout 链（P9 运维台时补的，之前是漏的）─────────────
+ * 原版只数 `page.tsx` 与它 import 的组件，于是「标题写在 layout 里」的页面
+ * 会被误报成 h1 数量 = 0。运维台六张页全部如此：
+ * `app/admin/ops/layout.tsx:28` 有 `<h1>运维台</h1>`（一句标题 + 一句「全程只读」
+ * 的定性说明写在 layout，避免五张子页各写一遍、漏写一张就让人以为某个按钮会改数据），
+ * 而 `app/admin/ops/{page,db/page,db/[table]/page,checks/page,runtime/page,env/page}.tsx`
+ * 自己只有 h2/h3。W2 当时报出「六个页面没有 h1」——**是测试的盲区，不是缺陷**。
+ *
+ * 按报错去给每页补 h1 才是错的：那些页面在浏览器里**已经**有 layout 的 h1，
+ * 再补一个就真的变成两个 h1，反而制造了 W2 要防的问题。
+ *
+ * ── 为什么只沿目录向上找 `layout.tsx`（而不是解析 import 图）────────────
+ * Next 的 layout 是**目录约定**，不是 import 关系：`app/a/b/page.tsx` 会套
+ * `app/a/b/layout.tsx`、`app/a/layout.tsx`、`app/layout.tsx` 三层（各自可选），
+ * 而 `page.tsx` 里根本不会 import 它们。所以这里按路径逐级向上找同名文件，
+ * 与框架行为一一对应。路由组 `(site)` / `(cosmic)` 是真实目录，天然被覆盖。
+ *
+ * 一层组件展开仍然足够，因为本项目所有「渲染标题的公共组件」都是叶子组件
  * （SectionIntro→h1、SectionHeading→h2、PostCard/ProjectCard→h3、PostToc→h2）。
  * 更深的情况（PostList → PostCard）会漏掉 h3，但遗漏只会让「跳级」检查**更宽松**
  * 而不会误报，所以是安全的方向；标题集合的连续性仍有页面自己的 sr-only 标题兜住。
@@ -338,6 +357,30 @@ function collectHeadingLevels(pageAbs: string): number[] {
     }
   };
 
+  // ① layout 链：从页面所在目录逐级向上到 app/，收集每一层存在的 layout.tsx。
+  //    顺序对「数量」无影响，但对将来可能加的「h1 必须在 layout 之前/之后」类断言有意义。
+  const layoutChain: string[] = [];
+  let dir = path.dirname(pageAbs);
+  while (dir.startsWith(APP_ROOT)) {
+    const layoutFile = path.join(dir, "layout.tsx");
+    if (existsSync(layoutFile)) layoutChain.push(layoutFile);
+    if (dir === APP_ROOT) break;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  for (const layoutFile of layoutChain.reverse()) {
+    harvest(read(layoutFile));
+    // layout 里的标题也可能来自它 import 的本地组件（例如 admin 的 chrome）。
+    for (const spec of localImportSpecs(read(layoutFile))) {
+      const resolved = resolveLocalModule(layoutFile, spec);
+      if (resolved === null) continue;
+      if (!resolved.endsWith(".tsx")) continue;
+      harvest(read(resolved));
+    }
+  }
+
+  // ② 页面自身 + 它 import 的本地组件。
   const pageSource = read(pageAbs);
   harvest(pageSource);
 

@@ -384,12 +384,111 @@ function notFoundRewrite(request: NextRequest): NextResponse {
   return NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url), { status: 404 });
 }
 
+/* -------------------------------------------------------------------------- */
+/* 运维台单表页的存在性检查（P7 软 404 在 /admin 下的复发形态）                  */
+/* -------------------------------------------------------------------------- */
+
+/** `/admin/ops/db/<table>` 里的表名；不是这个形态就返回 null。 */
+const OPS_TABLE_PREFIX = "/admin/ops/db/";
+
+function parseOpsTablePath(pathname: string): string | null {
+  if (!pathname.startsWith(OPS_TABLE_PREFIX)) return null;
+  const rest = pathname.slice(OPS_TABLE_PREFIX.length);
+  // 只接受单段表名；多段（/admin/ops/db/a/b）交给页面自己 404。
+  if (rest.length === 0 || rest.includes("/")) return null;
+  try {
+    return decodeURIComponent(rest);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 表是否存在。
+ *
+ * ── 为什么这件事不能交给页面里的 `notFound()`（实测结论）────────────────
+ * `/admin/**` 这棵子树必须声明 `export const instant = false`
+ * （`app/admin/layout.tsx:33`）—— 去掉它构建直接失败，实测两种报错：
+ * - 原版 layout（含 `<Suspense>`）：`Route "/admin/content/[kind]/[slug]":
+ *   Next.js encountered URL data `usePathname()` in a Client Component outside of <Suspense>.`
+ * - 去掉 layout 的 `<Suspense>`：`Route "/admin/content": Next.js encountered
+ *   uncached or runtime data during prerendering.`
+ *
+ * 代价是：`instant = false` 同时关掉了「即时导航校验」与「静态外壳校验」
+ * （`node_modules/next/dist/docs/01-app/03-api-reference/03-file-segment-config/instant.md`），
+ * 于是这棵子树里 `notFound()` 抛出的 404 在 HTTP 层退化成 **200**。
+ * 受控对照实验（同一次构建、同一个探针页）：
+ * ```
+ * FAIL  /admin/ops/probe404?mode=outside   顶层 notFound   期望404 实际200  404页=true
+ * FAIL  /admin/ops/probe404?mode=inside    Suspense 内     期望404 实际200  404页=true
+ * PASS  /blog/<随机 slug>                  (site) 子树     期望404 实际404
+ * ```
+ * → 同一个 `notFound()` 写法，`(site)` 下是真 404，`/admin` 下是软 404。
+ * 这不是「放顶层还是放 Suspense」的问题（两种都试过），也不是
+ * 「流式响应头已发出」的问题（在 `await connection()` 之后、渲染任何字节之前调用也一样）。
+ *
+ * ── 所以为什么改在 proxy 里判 ────────────────────────────────────────
+ * 与 P8 在 Vercel 边缘修软 404 是同一手法、同一理由：状态码必须在响应体
+ * 开始流出**之前**定死，而 proxy 是唯一能在此阶段决定状态码的地方
+ * （`resolve-routes.js:377` `res.statusCode = middlewareRes.status;`，见
+ * `notFoundRewrite` 的注释）。页面里的 `notFound()` 保留不动 —— 它是
+ * 「表名合法但查询时发现不存在」的最后兜底，也让直接渲染（无 proxy）时行为一致。
+ *
+ * ── 失败策略 ──────────────────────────────────────────────────────────
+ * 没配 `DATABASE_URL`、查库报错、超时 → 返回 `null`（无法判定）→ **放行**。
+ * 与 `probeWithTimeout` 同一条原则：判不了就当它存在，绝不能把「库连不上」
+ * 变成「后台全部 404」。
+ */
+async function opsTableExists(table: string): Promise<boolean | null> {
+  const client = await getClient();
+  if (client === null) return null;
+
+  try {
+    const rows = await client<{ one: number }>`
+      select 1 as one
+      from information_schema.tables
+      where table_schema = 'public' and table_name = ${table}
+      limit 1
+    `;
+    return rows.length > 0;
+  } catch (error) {
+    console.error("[proxy] 运维台表存在性检查失败，本次请求放行：", error);
+    return null;
+  }
+}
+
+/** 与 `probeWithTimeout` 同构：只有明确 `false` 才算不存在。 */
+async function opsTableExistsWithTimeout(table: string): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), PROBE_TIMEOUT_MS);
+  });
+
+  try {
+    const result = await Promise.race([opsTableExists(table), timeout]);
+    return result !== false;
+  } catch (error) {
+    console.error("[proxy] 运维台表存在性检查异常，本次请求放行：", error);
+    return true;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   // 后台先挡：未带会话 Cookie 的请求在任何渲染发生之前就掉头（见 guardAdminArea）。
   const guarded = guardAdminArea(request);
   if (guarded) return guarded;
+
+  // 运维台单表页：表不存在要真 404。必须在这里判 —— `/admin/**` 的
+  // `instant = false` 会让页面内 `notFound()` 回 200（见 opsTableExists）。
+  const opsTable = parseOpsTablePath(pathname);
+  if (opsTable !== null) {
+    const exists = await opsTableExistsWithTimeout(opsTable);
+    if (!exists) return notFoundRewrite(request);
+  }
 
   // 静态兜底优先：它比数据库更可靠，也省一次查询。
   const staticTarget = STATIC_REDIRECTS[pathname];

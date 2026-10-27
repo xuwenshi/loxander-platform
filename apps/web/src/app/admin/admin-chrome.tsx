@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import {
+  ActivityIcon,
   CheckCircleIcon,
   CloseIcon,
   ImageIcon,
@@ -43,6 +44,11 @@ const NAV_ITEMS = [
   { href: "/admin/media", label: "媒体", icon: ImageIcon, exact: false },
   { href: "/admin/audit", label: "审计日志", icon: CheckCircleIcon, exact: false },
   { href: "/admin/new", label: "新建内容", icon: FileTextIcon, exact: true },
+  // 「运维台」放最后但不是 exact：它下面有 /db、/checks、/runtime、/env
+  // 四个子页，靠 startsWith 才在子页里也保持高亮。
+  // 放在「设置」之前是有意的：设置是「改配置」，运维台是「看状态」，
+  // 日常看得比改得多，排在更靠前的位置少一次移动。
+  { href: "/admin/ops", label: "运维台", icon: ActivityIcon, exact: false },
   { href: "/admin/settings", label: "设置", icon: SettingsIcon, exact: true },
 ] as const;
 
