@@ -73,6 +73,21 @@ npm run test:rollback       # 内容源回滚四腿演练
 
 `/admin` 仅限 `ADMIN_GITHUB_LOGIN` 白名单内的 GitHub 账号。写操作在 Server Action 内部独立完成七道校验（会话 → 白名单 → Zod → 乐观锁 → 事务写 → 缓存失效 → 审计），**不依赖 proxy 拦截**——Next 的 Server Function 是 POST 到所在路由，proxy matcher 排除 `api/` 后根本不会经过它。
 
+### 运维台 `/admin/ops`
+
+后台里的运维分区，18 项能力全部在 `apps/web/src/lib/ops/capabilities.ts` 声明，页面上显示的可用性由运行时判据算出（14 可用 / 1 禁用 / 3 如实标注只能去终端跑），不是写死的文案。
+
+| 页面 | 内容 |
+| --- | --- |
+| `/admin/ops/db` | 表清单与体积、只读 SQL 面板、迁移状态（磁盘 3 份 vs 库里已应用 + sha256 比对）、逻辑备份与只读比对 |
+| `/admin/ops/checks` | 环境 / 迁移 / 构建 / CSS / 仓库五项检查进程内执行 |
+| `/admin/ops/runtime` | BUILD_ID、git HEAD、数据库只读自证、CSS 产物、版本一致性（本机 HEAD vs 线上 `version`）、16 条路由巡检 |
+| `/admin/ops/env` | env 矩阵（复用 `buildSettingsReport()`）+ Vercel（含 `linkType`）+ Neon 端点状态 |
+
+**数据库只读**：连接层 `default_transaction_read_only = on` 是唯一不依赖正则正确性的防线；上层再做单条语句、首词白名单、剥离字面量后匹配 36 个禁用词（含 `INTO`）、8 秒语句超时、500 行上限。恢复备份刻意不做（用户选只读），要恢复去终端跑 `npm run db:restore`。
+
+**为什么脚本不能用按钮跑**：`child_process` 在本机沙箱下 `spawn EPERM`，Vercel Serverless 也不提供。所以「点按钮跑 preflight / Playwright / 回滚演练」这一类被如实标成 `unavailable` 并给出终端命令，而不是假装能跑。
+
 ## 文档
 
 - `docs/p8-legacy-retirement.md` — 旧链路下线与归档记录（含三项本机无权限完成的事项）
