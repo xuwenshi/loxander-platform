@@ -88,8 +88,22 @@ npm run test:rollback       # 内容源回滚四腿演练
 
 **为什么脚本不能用按钮跑**：`child_process` 在本机沙箱下 `spawn EPERM`，Vercel Serverless 也不提供。所以「点按钮跑 preflight / Playwright / 回滚演练」这一类被如实标成 `unavailable` 并给出终端命令，而不是假装能跑。
 
+### 本地打开运维台
+
+桌面上有一个 **「运维台」** 快捷方式，双击即起服务并打开 `http://localhost:3210/admin/ops`。命令行等价于 `npm run ops`。
+
+```bash
+npm run ops                # 起服务 + 开浏览器（双击快捷方式做的事）
+npm run ops:url            # 只打印 URL
+npm run ops:shortcut       # 重建桌面快捷方式
+npm run ops:icon           # 重新生成 scripts/ops.ico
+```
+
+端口固定 **3210**、浏览器开 **`localhost`** 而不是 `127.0.0.1` —— 这两个都不是随意选的：前者要和 `apps/web/.env.local` 的 `AUTH_URL` 与 GitHub OAuth App 登记的回调地址一致，后者决定会话 cookie 能不能被带上。细节与排错见 `docs/ops-desktop-shortcut.md`。
+
 ## 文档
 
 - `docs/p8-legacy-retirement.md` — 旧链路下线与归档记录（含三项本机无权限完成的事项）
+- `docs/ops-desktop-shortcut.md` — 运维台桌面快捷方式：为什么端口是 3210、为什么开 localhost、排错表
 - `docs/migration-p0.md` — 旧仓库到 monorepo 的迁移记录
 - `docs/recon-p0.md` — P0 侦察结论
