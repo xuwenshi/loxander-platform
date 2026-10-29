@@ -5,7 +5,7 @@ import { cosmicSections } from "@/lib/cosmic";
 import type { CosmicSectionId } from "@/lib/cosmic";
 
 /**
- * 五行星星图（服务端组件）。
+ * 五分行星星图（服务端组件）。
  *
  * 布局策略：
  * - ≥768px：绝对定位的星图。坐标来自 `cosmic.ts` 的百分比（刻意不随机：
@@ -15,6 +15,8 @@ import type { CosmicSectionId } from "@/lib/cosmic";
  *
  * 两个布局都输出真实 `<CosmicLink>`（`warp` 变体），只是用 `md:block` /
  * `md:hidden` 切换显示；被 `display:none` 隐藏的那一份不会被读屏软件读到。
+ *
+ * 换皮后每颗星球自带材质与光源：不再共用一套斜纹换五个色。
  */
 
 /** 星座连线：一条闭合的折线，把五颗行星串成一个「星座」而不是散点 */
@@ -34,7 +36,8 @@ export default function StarMap() {
       {/* ------------------------------------------------- 桌面 / 平板：星图布局 */}
       <div className="relative mx-auto hidden w-full max-w-5xl md:block">
         <div className="relative aspect-[16/11] w-full">
-          {/* 星座连线：纯装饰，对读屏与键盘完全透明 */}
+          {/* 星座连线：纯装饰，对读屏与键盘完全透明。
+              颜色走 --cosmic-line，跟随主题（深空是淡银色，纸上是一条细线） */}
           <svg
             aria-hidden
             focusable="false"
@@ -53,7 +56,7 @@ export default function StarMap() {
                   y1={a.coords.y}
                   x2={b.coords.x}
                   y2={b.coords.y}
-                  stroke="rgba(232, 236, 246, 0.16)"
+                  stroke="var(--cosmic-line)"
                   strokeWidth={1}
                   strokeDasharray="2 5"
                   strokeLinecap="round"
@@ -80,14 +83,23 @@ export default function StarMap() {
                     className="cosmic-float inline-block"
                     style={{ animationDelay: `${index * -1.7}s` }}
                   >
-                    <PlanetSphere section={section} />
+                    <PlanetSphere
+                      planet={section.planet}
+                      diameter={section.size}
+                      accent={section.accent}
+                      spin={section.spin}
+                      ring={section.ring}
+                      material={section.material}
+                      lightX={section.light.x}
+                      lightY={section.light.y}
+                    />
                   </span>
 
                   <span className="flex flex-col items-center gap-1">
-                    <span className="text-base font-semibold tracking-tight text-cosmic-text transition-colors group-hover:text-cosmic-ice">
+                    <span className="font-serif text-base font-medium tracking-tight text-cosmic-text transition-colors group-hover:text-accent">
                       {section.name}
                     </span>
-                    <span className="text-xs font-medium uppercase tracking-[0.22em] text-cosmic-muted">
+                    <span className="font-mono text-[0.5625rem] uppercase tracking-[0.22em] text-cosmic-muted">
                       {section.latin}
                     </span>
                     <span className="max-w-[15rem] text-xs leading-relaxed text-cosmic-muted">
@@ -108,14 +120,23 @@ export default function StarMap() {
             <CosmicLink
               href={section.href}
               variant="warp"
-              className="group flex min-h-[64px] items-center gap-4 rounded-2xl border border-cosmic-line bg-white/[0.03] px-4 py-3.5 transition-colors hover:border-cosmic-ice/60 hover:bg-white/[0.06]"
+              className="group flex min-h-[64px] items-center gap-4 rounded-2xl border border-cosmic-line bg-surface px-4 py-3.5 transition-colors hover:border-accent/60 hover:bg-elevated"
             >
-              <PlanetSphere section={section} size={44} />
+              <PlanetSphere
+                planet={section.planet}
+                diameter={44}
+                accent={section.accent}
+                spin={section.spin}
+                ring={section.ring}
+                material={section.material}
+                lightX={section.light.x}
+                lightY={section.light.y}
+              />
 
               <span className="flex-1">
                 <span className="block text-base font-medium text-cosmic-text">
                   {section.name}
-                  <span className="ml-2 text-xs font-medium uppercase tracking-[0.18em] text-cosmic-muted">
+                  <span className="ml-2 font-mono text-[0.5625rem] uppercase tracking-[0.18em] text-cosmic-muted">
                     {section.latin}
                   </span>
                 </span>
@@ -127,7 +148,7 @@ export default function StarMap() {
               <ArrowRightIcon
                 width={16}
                 height={16}
-                className="shrink-0 text-cosmic-muted transition-transform group-hover:translate-x-0.5 group-hover:text-cosmic-ice"
+                className="shrink-0 text-cosmic-muted transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
               />
             </CosmicLink>
           </li>

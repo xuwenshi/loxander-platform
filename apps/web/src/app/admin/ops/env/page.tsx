@@ -40,7 +40,7 @@ async function OpsEnvBody() {
 
   return (
     <div>
-      <h2 className="mt-6 text-lg font-semibold text-foreground">环境与平台</h2>
+      <h2 className="mt-6 font-serif text-lg font-medium text-foreground">环境与平台</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         上半部分是**本地配置矩阵**（读 <code className="font-mono">process.env</code>，脱敏后展示），
         与 <a href="/admin/settings" className="text-accent underline-offset-2 hover:underline">设置页</a>

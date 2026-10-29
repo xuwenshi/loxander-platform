@@ -60,7 +60,7 @@ export default async function DiaryEntryPage({ params }: DiaryEntryPageProps) {
 
       <article className="mt-6">
         <header className="cosmic-enter border-b border-border pb-8">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted">
             <span className="inline-flex items-center gap-1.5">
               <CalendarIcon width={13} height={13} />
               <time dateTime={entry.date}>{formatDate(entry.date)}</time>
@@ -68,7 +68,7 @@ export default async function DiaryEntryPage({ params }: DiaryEntryPageProps) {
             {entry.mood ? <span>心情 · {entry.mood}</span> : null}
           </div>
 
-          <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+          <h1 className="mt-4 font-serif text-[clamp(1.75rem,3.6vw,2.5rem)] font-medium leading-[1.24] tracking-tight text-foreground">
             {entry.title}
           </h1>
 

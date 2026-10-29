@@ -34,7 +34,7 @@ export default function MediaLibraryPage() {
     <div className="mx-auto w-full max-w-5xl">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">媒体</h1>
+          <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">媒体</h1>
           <p className="mt-1 text-sm text-muted">
             上传图片并查看引用情况。删除前会检查是否仍被正文或封面引用 —— 被引用的图不允许删。
           </p>

@@ -36,11 +36,11 @@ export function ResultBadge({ ok, label }: { ok: boolean; label?: string }) {
   return <Chip tone={tone} label={label ?? TONE_LABEL[tone]} />;
 }
 
-/** 通用胶囊。 */
+/** 通用小方块（换皮后统一成 1px 直角，与全站铭牌语汇一致）。 */
 export function Chip({ tone, label }: { tone: Tone; label: string }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${TONE_CLASS[tone]}`}
+      className={`inline-flex shrink-0 items-center rounded-xs border px-2 py-0.5 font-mono text-[11px] tracking-[0.04em] ${TONE_CLASS[tone]}`}
     >
       {label}
     </span>

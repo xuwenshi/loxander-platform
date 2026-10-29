@@ -76,7 +76,7 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
           type="button"
           onClick={() => selectTag(null)}
           aria-pressed={activeTag === null}
-          className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-medium transition-colors ${
+          className={`inline-flex min-h-11 items-center rounded-xs border px-3.5 font-mono text-[0.625rem] uppercase tracking-[0.14em] transition-colors ${
             activeTag === null
               ? "border-accent bg-accent text-on-accent"
               : "border-border bg-surface text-muted hover:text-foreground"
@@ -91,7 +91,7 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
             type="button"
             onClick={() => selectTag(tag)}
             aria-pressed={activeTag === tag}
-            className={`inline-flex min-h-11 items-center rounded-full border px-3.5 text-xs font-medium transition-colors ${
+            className={`inline-flex min-h-11 items-center rounded-xs border px-3.5 font-mono text-[0.625rem] uppercase tracking-[0.14em] transition-colors ${
               activeTag === tag
                 ? "border-accent bg-accent text-on-accent"
                 : "border-border bg-surface text-muted hover:text-foreground"
@@ -121,7 +121,7 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
                 type="button"
                 onClick={() => setPage(currentPage - 1)}
                 disabled={currentPage === 1}
-                className="inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex min-h-11 items-center rounded-xs border border-border bg-surface px-4 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               >
                 上一页
               </button>
@@ -132,7 +132,7 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
                   type="button"
                   onClick={() => setPage(number)}
                   aria-current={number === currentPage ? "page" : undefined}
-                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border px-3 text-xs font-medium transition-colors ${
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xs border px-3 font-mono text-xs tabular-nums transition-colors ${
                     number === currentPage
                       ? "border-accent bg-accent text-on-accent"
                       : "border-border bg-surface text-muted hover:text-foreground"
@@ -146,7 +146,7 @@ export default function PostList({ posts }: { posts: PostMeta[] }) {
                 type="button"
                 onClick={() => setPage(currentPage + 1)}
                 disabled={currentPage === pageCount}
-                className="inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-4 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex min-h-11 items-center rounded-xs border border-border bg-surface px-4 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               >
                 下一页
               </button>

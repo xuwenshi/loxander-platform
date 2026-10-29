@@ -75,7 +75,7 @@ export default async function TagsPage() {
                 */}
                 <Link
                   href={tagHref(tag)}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm font-medium text-muted transition-colors hover:border-accent/60 hover:text-foreground"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xs border border-border bg-surface px-4 text-sm font-medium text-muted transition-colors hover:border-accent/60 hover:text-foreground"
                 >
                   {tag}
                   <span className="font-mono text-xs text-muted-deep">{count}</span>

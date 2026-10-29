@@ -74,7 +74,7 @@ export default async function TableStructurePage({ params }: PageProps<"/admin/o
   return (
     <div>
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <h2 className="font-mono text-lg font-semibold text-foreground">{structure.table.name}</h2>
+        <h2 className="font-mono text-lg font-medium text-foreground">{structure.table.name}</h2>
         <Chip tone="ok" label={`${structure.columns.length} 列`} />
         <Chip tone="muted" label={`${structure.indexes.length} 索引`} />
         <Chip tone="muted" label={`${structure.constraints.length} 约束`} />

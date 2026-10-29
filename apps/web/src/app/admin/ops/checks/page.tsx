@@ -49,7 +49,7 @@ async function OpsChecksBody() {
 
   return (
     <div>
-      <h2 className="mt-6 text-lg font-semibold text-foreground">检查</h2>
+      <h2 className="mt-6 font-serif text-lg font-medium text-foreground">检查</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         全部检查都在**本进程内**执行：读文件系统、读数据库、发 HTTP 请求，不起子进程。
         需要子进程的（tsc、全部单测、Playwright、回滚演练、Markdown 导出）在下面的

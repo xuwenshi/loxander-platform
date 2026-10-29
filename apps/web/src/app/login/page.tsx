@@ -36,9 +36,11 @@ export default function LoginPage({
   searchParams: Promise<{ error?: string; callbackUrl?: string }>;
 }) {
   return (
+    /* relative z-10：暗角（z-1）/颗粒（z-2）是 position:fixed，登录页不定位
+       就会被它们盖住，深色主题下表单文字发黑。与 (site)/layout.tsx 同一个理由。 */
     <main
       id="main"
-      className="flex min-h-screen flex-col items-center justify-center px-4 py-16"
+      className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 py-16"
     >
       <div className="w-full max-w-sm">
         <Suspense fallback={<LoginPanel error={null} />}>

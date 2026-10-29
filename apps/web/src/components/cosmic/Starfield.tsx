@@ -115,6 +115,30 @@ export default function Starfield({ className = "" }: { className?: string }) {
     const parallaxTarget = { x: 0, y: 0 };
     const parallaxCurrent = { x: 0, y: 0 };
 
+    /*
+     * 星点颜色的 RGB 三元组，来自 CSS 令牌 --star-rgb。
+     * 缓存成字符串，只在主题 / 强调色变化时重读一次 —— 逐帧读
+     * getComputedStyle 会强制样式重算，几百个粒子就够把帧率拖下去。
+     */
+    let starRGB = "255,255,255";
+    const readStarRGB = () => {
+      const value = getComputedStyle(document.documentElement)
+        .getPropertyValue("--star-rgb")
+        .trim();
+      if (value) starRGB = value;
+    };
+    readStarRGB();
+
+    /* 主题切换（.dark 或 data-accent 变化）后刷新星点颜色 */
+    const themeObserver = new MutationObserver(() => {
+      readStarRGB();
+      if (!running) draw();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-accent"],
+    });
+
     const isMobile = () => width < 768;
 
     function rebuild() {
@@ -146,6 +170,13 @@ export default function Starfield({ className = "" }: { className?: string }) {
     function draw() {
       ctx!.clearRect(0, 0, width, height);
 
+      /*
+       * 星点颜色跟随主题：深色是白星点（--star-rgb: 255,255,255），
+       * 浅色是墨渍（--star-rgb: 58,50,38）—— 暖白纸上画白点等于没画。
+       * 每帧读一次 getComputedStyle 太贵，只在主题切换时刷新（见下方 observer）。
+       */
+      const rgb = starRGB;
+
       for (const layer of layers) {
         const { def, items } = layer;
         const lx = -parallaxCurrent.x * PARALLAX * def.depth;
@@ -156,7 +187,7 @@ export default function Starfield({ className = "" }: { className?: string }) {
             ? p.alpha
             : p.alpha * (0.55 + 0.45 * Math.sin(elapsed * p.twinkle + p.phase));
 
-          ctx!.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+          ctx!.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
           const x = p.x + lx + p.ox;
           const y = p.y + ly + p.oy;
 
@@ -170,7 +201,7 @@ export default function Starfield({ className = "" }: { className?: string }) {
             ctx!.fill();
 
             // 近景大颗粒补一层很淡的光晕，形成景深而不产生刺眼闪烁
-            ctx!.fillStyle = `rgba(255,255,255,${(alpha * 0.18).toFixed(3)})`;
+            ctx!.fillStyle = `rgba(${rgb},${(alpha * 0.18).toFixed(3)})`;
             ctx!.beginPath();
             ctx!.arc(x, y, p.r * 2.6, 0, TAU);
             ctx!.fill();
@@ -306,6 +337,7 @@ export default function Starfield({ className = "" }: { className?: string }) {
       stop();
       cancelAnimationFrame(resizeFrame);
       observer.disconnect();
+      themeObserver.disconnect();
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerdown", onPointerMove);
       window.removeEventListener("pointerleave", onPointerLeave);

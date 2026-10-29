@@ -6,39 +6,44 @@ import type { ProjectMeta } from "@/types";
 /**
  * 项目卡片。
  *
- * 封面不用真实图片：改由「统一的深空底 + 主强调色柔光 + 项目首字母」构成。
- * 早先的版本按 slug 哈希出随机色相，问题有两个：
- * ① 卡片之间颜色互不相关，视觉上像拼贴，破坏设计系统的一致性；
- * ② 随机色相里的深色配白字，没有经过对比度校验。
- * 现在封面色走宇宙层恒定令牌（--cosmic-deep / --cosmic-void / --cosmic-text），
- * 无论 Light 还是 Dark 主题都是同一块深空底，白字对比度稳定在 17:1 以上。
+ * 封面不用真实图片：由「主题表面 + 主强调色柔光 + 项目首字母」构成。
+ *
+ * 换皮时改掉了原来的做法：早先封面写死 `--cosmic-deep / --cosmic-void`
+ * 两块恒定深空色，浅色主题下会变成「一张深色块贴在暖白纸上」。
+ * 现在封面完全走主题令牌（--surface / --elevated / --accent），
+ * 明暗两种模式下都是同一套语言，只是明暗互换。
  */
 export default function ProjectCard({ project }: { project: ProjectMeta }) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-elevated transition-colors hover:border-accent/50">
-      <div
-        className="relative flex h-28 items-center justify-between overflow-hidden px-5"
-        style={{
-          backgroundImage:
-            "linear-gradient(135deg, var(--cosmic-deep), var(--cosmic-void))",
-        }}
-      >
-        {/* 主强调色的柔光，给统一的深空底一点层次，不改变整体一致性 */}
+      <div className="relative flex h-28 items-center justify-between overflow-hidden border-b border-border bg-surface px-5">
+        {/* 主强调色的柔光，给封面一点层次，不改变整体一致性 */}
         <span
           aria-hidden
-          className="absolute inset-0 opacity-[0.18]"
+          className="absolute inset-0 opacity-[0.22]"
           style={{
             backgroundImage:
-              "radial-gradient(120% 130% at 18% 0%, var(--accent), transparent 58%)",
+              "radial-gradient(120% 130% at 16% 0%, var(--accent), transparent 58%)",
           }}
         />
+        {/* 细网格：像观测记录纸上的坐标格 */}
         <span
           aria-hidden
-          className="relative text-4xl font-bold text-cosmic-text drop-shadow-sm"
+          className="absolute inset-0 opacity-[0.5]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
+            backgroundSize: "22px 22px",
+          }}
+        />
+
+        <span
+          aria-hidden
+          className="relative font-serif text-4xl font-medium text-foreground"
         >
           {project.name.slice(0, 1).toUpperCase()}
         </span>
-        <span className="relative rounded-full border border-cosmic-line bg-white/[0.06] px-2.5 py-0.5 text-xs font-medium text-cosmic-text backdrop-blur">
+        <span className="relative rounded-xs border border-border bg-elevated px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted backdrop-blur">
           {project.period ?? "项目"}
         </span>
       </div>
@@ -49,7 +54,7 @@ export default function ProjectCard({ project }: { project: ProjectMeta }) {
           {project.role ? <Chip>{project.role}</Chip> : null}
         </div>
 
-        <h3 className="mt-3 text-base font-semibold tracking-tight text-foreground sm:text-lg">
+        <h3 className="mt-3 font-serif text-lg font-medium leading-snug tracking-tight text-foreground sm:text-xl">
           <CosmicLink
             href={`/projects/${project.slug}`}
             className="after:absolute after:inset-0"
@@ -75,12 +80,12 @@ export default function ProjectCard({ project }: { project: ProjectMeta }) {
       <div className="relative z-10 flex flex-wrap items-center gap-4 border-t border-border px-5 py-3 text-sm">
         <CosmicLink
           href={`/projects/${project.slug}`}
-          className="inline-flex items-center gap-1 font-medium text-accent transition-colors hover:text-accent-hover"
+          className="inline-flex items-center gap-1 font-mono text-[0.625rem] uppercase tracking-[0.16em] text-accent transition-colors hover:text-accent-hover"
         >
           查看详情
           <ArrowRightIcon
-            width={15}
-            height={15}
+            width={14}
+            height={14}
             className="transition-transform group-hover:translate-x-0.5"
           />
         </CosmicLink>

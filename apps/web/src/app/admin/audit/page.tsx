@@ -33,7 +33,9 @@ export default function AuditPage({
   return (
     <div className="mx-auto w-full max-w-5xl">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">审计日志</h1>
+        <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">
+          审计日志
+        </h1>
         <p className="mt-1 text-sm text-muted">
           登录、创建、保存、发布、归档、恢复都会留下记录。日志只增不改 ——
           后台没有任何删除审计的入口。

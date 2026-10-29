@@ -18,11 +18,11 @@ export default function SectionHeading({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+        <h2 className="font-serif text-xl font-medium tracking-tight text-foreground sm:text-2xl">
           {title}
         </h2>
         {description ? (
-          <p className="mt-1 text-sm text-muted">{description}</p>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">{description}</p>
         ) : null}
       </div>
 
@@ -32,14 +32,14 @@ export default function SectionHeading({
             href={action.href}
             target="_blank"
             rel="noreferrer noopener"
-            className="text-sm font-medium text-accent transition-colors hover:text-accent-hover"
+            className="inline-flex min-h-11 items-center font-mono text-[0.625rem] uppercase tracking-[0.16em] text-accent transition-colors hover:text-accent-hover"
           >
             {action.label}
           </a>
         ) : (
           <CosmicLink
             href={action.href}
-            className="text-sm font-medium text-accent transition-colors hover:text-accent-hover"
+            className="inline-flex min-h-11 items-center font-mono text-[0.625rem] uppercase tracking-[0.16em] text-accent transition-colors hover:text-accent-hover"
           >
             {action.label}
           </CosmicLink>

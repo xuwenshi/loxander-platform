@@ -33,7 +33,7 @@ export default function NewEntryPage({
     <div className="mx-auto w-full max-w-5xl">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">新建内容</h1>
+          <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">新建内容</h1>
           <p className="mt-1 text-sm text-muted">
             新建的内容一律先存为草稿。发布是独立流程（校验 → 预览 → 确认），
             避免误点一次就把半成品推上线。

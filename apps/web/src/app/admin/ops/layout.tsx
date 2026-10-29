@@ -25,7 +25,7 @@ export default function OpsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">运维台</h1>
+        <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">运维台</h1>
         <p className="mt-1 text-sm text-muted">
           数据库、检查、运行态、环境与平台的统一入口。
           <strong className="font-medium text-foreground"> 数据库连接全程只读</strong>

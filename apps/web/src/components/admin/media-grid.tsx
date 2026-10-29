@@ -55,7 +55,7 @@ export function MediaGrid({ rows }: { rows: MediaGridRow[] }) {
   return (
     <div className="mt-6">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold text-foreground">全部图片</h2>
+        <h2 className="font-serif text-sm font-medium text-foreground">全部图片</h2>
         <span className="text-xs tabular-nums text-muted">共 {rows.length} 张</span>
       </div>
 

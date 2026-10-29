@@ -61,7 +61,7 @@ export default async function GoalsPage() {
 
             return (
               <section key={id}>
-                <h2 className="flex items-baseline gap-2 text-lg font-semibold tracking-tight text-foreground">
+                <h2 className="flex items-baseline gap-2 font-serif text-lg font-medium tracking-tight text-foreground">
                   {label}
                   <span className="text-xs font-medium uppercase tracking-[0.22em] text-muted">
                     {latin}
@@ -75,10 +75,10 @@ export default async function GoalsPage() {
                       className="cosmic-enter rounded-xl border border-border bg-elevated p-5"
                     >
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <h3 className="text-base font-semibold tracking-tight text-foreground">
+                        <h3 className="font-serif text-base font-medium tracking-tight text-foreground">
                           {goal.title}
                         </h3>
-                        <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs text-muted">
+                        <span className="rounded-xs border border-border bg-surface px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted">
                           {STATUS_LABELS[goal.status]}
                         </span>
                         {goal.period ? (
@@ -86,7 +86,10 @@ export default async function GoalsPage() {
                         ) : null}
                       </div>
 
-                      {/* 进度：用原生 progressbar 语义，读屏软件能读出数值 */}
+                      {/* 进度：用原生 progressbar 语义，读屏软件能读出数值。
+                          换皮后从「2px 圆角滑块」改成 1px 细线 —— 原型里技能/进度条
+                          就是一条 1px 刻线加一段发光填充（`_prototype/redesign.html:883-889`
+                          `.bar .tr{height:1px} .bar .tr i`），像仪表读数而不是 App 进度条。 */}
                       <div className="mt-4 flex items-center gap-3">
                         <div
                           role="progressbar"
@@ -94,17 +97,17 @@ export default async function GoalsPage() {
                           aria-valuemin={0}
                           aria-valuemax={100}
                           aria-label={`${goal.title} 进度`}
-                          className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface"
+                          className="h-px flex-1 overflow-hidden bg-border"
                         >
                           <span
-                            className="block h-full rounded-full"
+                            className="block h-full"
                             style={{
                               width: `${goal.progress}%`,
                               backgroundColor: section.accent,
                             }}
                           />
                         </div>
-                        <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted">
+                        <span className="w-10 shrink-0 text-right font-mono text-[0.625rem] tabular-nums tracking-[0.1em] text-muted">
                           {goal.progress}%
                         </span>
                       </div>

@@ -1,22 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 
 import CosmicTransitionProvider from "@/components/cosmic/TransitionProvider";
 import CosmicTransitionOverlay from "@/components/cosmic/TransitionOverlay";
+import Ambience from "@/components/layout/Ambience";
+import ParticleWave from "@/components/layout/ParticleWave";
 import { siteConfig } from "@/lib/site";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+/*
+ * 换皮后不再加载 Geist：观测站的排版身份是
+ * 「衬线标题 + 无衬线正文 + 等宽数据」的中文系统字体栈，
+ * 全部由 globals.css 的 --font-stack-* 提供，零网络字节。
+ * 中文字形本来就不在 Geist 的 latin 子集里，之前全站中文一直是
+ * 落到系统兜底字体上，这里只是把既成事实写成声明。
+ */
 
 const defaultTitle = `${siteConfig.author} · ${siteConfig.role}`;
 
@@ -72,8 +71,10 @@ export const metadata: Metadata = {
  * 必须与 globals.css 里 --background 的实际取值一致，否则会出现
  * 「深空页面顶着一条白色状态栏」。主题由 class 决定，媒体查询猜不准，
  * 所以浅色用户由 ThemeToggle 在拿到真实主题后修正这个 meta。
+ *
+ * 换皮后：深空 #05070a（观测站夜空）、浅色 #f6f2e9（暖白星图册纸色）。
  */
-const THEME_COLORS = { dark: "#060a18", light: "#ffffff" } as const;
+const THEME_COLORS = { dark: "#05070a", light: "#f6f2e9" } as const;
 
 export const viewport: Viewport = {
   // width=device-width 之外还要显式声明 viewportFit: cover，
@@ -108,10 +109,10 @@ export const viewport: Viewport = {
  * hydration 之后被重新插入，脚本删了也会被加回来（见 viewport 注释）。
  * 该 meta 由 viewport 静态声明默认值，浅色用户由 ThemeToggle 修正。
  *
- * 注意：宇宙层（/ 与 /universe）恒定深空，不受这个主题影响 ——
- * 它们的深空底色由 (cosmic)/layout.tsx 的 .cosmic-scope 类（SSR 即存在）保证。
+ * 注意：宇宙层（/ 与 /universe）现在也跟随主题 —— 换皮后 `.cosmic-scope`
+ * 的底色是 `var(--background)`，深色是夜空、浅色是暖白纸，两者都有星图。
  */
-const themeInitScript = `(function(){try{var t=localStorage.getItem("theme")||"dark";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";}catch(e){}})();`;
+const themeInitScript = `(function(){try{var t=localStorage.getItem("theme")||"dark";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";var a=localStorage.getItem("accent");if(a&&a!=="copper")r.setAttribute("data-accent",a);}catch(e){}})();`;
 
 const structuredData = {
   "@context": "https://schema.org",
@@ -148,11 +149,7 @@ const structuredData = {
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="zh-CN"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
+    <html lang="zh-CN" suppressHydrationWarning className="h-full antialiased">
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
@@ -165,6 +162,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </a>
 
         <CosmicTransitionProvider>
+          {/* 氛围层（暗角 / 颗粒 / 指针跟随 / 粒子浪潮）挂在根外壳上：
+              宇宙层、行星内部、admin 共用同一张纸，才算「整站换皮」。
+              全部是 pointer-events:none 的纯装饰，不参与任何布局与交互。 */}
+          <Ambience />
+          <ParticleWave />
           {children}
           <CosmicTransitionOverlay />
         </CosmicTransitionProvider>

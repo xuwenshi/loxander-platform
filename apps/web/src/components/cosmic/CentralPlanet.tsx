@@ -148,7 +148,7 @@ export default function CentralPlanet() {
       ctx!.fill();
 
       /* 2. 光环后半段（先画，随后被球体遮住，形成「绕到球后」的错觉） */
-      ctx!.strokeStyle = "rgba(232,236,246,0.3)";
+      ctx!.strokeStyle = rgba(cAccent, 0.3);
       ctx!.lineWidth = Math.max(1, radius * 0.02);
       ctx!.beginPath();
       ctx!.ellipse(cx, cy, radius * 1.52, radius * 0.4, rot, Math.PI, TAU);
@@ -207,7 +207,7 @@ export default function CentralPlanet() {
       ctx!.restore();
 
       /* 4. 光环前半段：覆盖在球体之上，强化「环在球前」的立体关系 */
-      ctx!.strokeStyle = "rgba(232,236,246,0.55)";
+      ctx!.strokeStyle = rgba(cAccent, 0.55);
       ctx!.lineWidth = Math.max(1, radius * 0.022);
       ctx!.beginPath();
       ctx!.ellipse(cx, cy, radius * 1.52, radius * 0.4, rot, 0, Math.PI);
@@ -321,10 +321,10 @@ export default function CentralPlanet() {
 
       {/* 入口提示：文字永远在氛围层之上 */}
       <span className="flex flex-col items-center gap-1.5 text-center">
-        <span className="text-lg font-semibold tracking-tight text-cosmic-text sm:text-xl">
+        <span className="font-serif text-lg font-medium tracking-tight text-cosmic-text sm:text-xl">
           进入我的宇宙
         </span>
-        <span className="text-xs font-medium uppercase tracking-[0.28em] text-cosmic-muted transition-colors group-hover:text-cosmic-ice group-focus-visible:text-cosmic-ice">
+        <span className="font-mono text-[0.625rem] uppercase tracking-[0.28em] text-cosmic-muted transition-colors group-hover:text-accent group-focus-visible:text-accent">
           Enter the universe
         </span>
         {/* 去向说明用 sr-only 挂在内容里，而不是用 aria-label 覆盖：

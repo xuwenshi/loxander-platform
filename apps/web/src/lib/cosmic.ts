@@ -31,6 +31,20 @@ export type PlanetPalette = {
   dark: string;
 };
 
+/**
+ * 星球地表材质。
+ *
+ * 换皮前五颗行星共用同一套斜纹，只换色相，看起来像「一张皮换五个色」。
+ * 现在由材质决定纹理配方，颜色只负责气候：
+ * - `clay`：细腻漫反射，接近岩石/尘埃，几乎没有条纹；
+ * - `banded`：纬向条带，像木星那种大气带；
+ * - `fractured`：多方向裂隙，像冰壳或断层岩层。
+ */
+export type PlanetMaterial = "clay" | "banded" | "fractured";
+
+/** 球面上的光源位置（百分比坐标），决定高光落在哪里 */
+export type PlanetLight = { x: string; y: string };
+
 export type CosmicSection = {
   id: CosmicSectionId;
   /** 中文名，用于标题与标签 */
@@ -47,6 +61,10 @@ export type CosmicSection = {
   accent: string;
   /** 星球配色 */
   planet: PlanetPalette;
+  /** 星球地表材质 */
+  material: PlanetMaterial;
+  /** 光源位置（球面上的百分比坐标），让五颗星球的受光方向各不相同 */
+  light: { x: string; y: string };
   /** 是否显示光环 */
   ring: boolean;
   /** 球体表面纹理的自转周期，数值越大越慢 */
@@ -76,6 +94,8 @@ export const cosmicSections: CosmicSection[] = [
       dark: "#232c45",
     },
     ring: true,
+    material: "clay",
+    light: { x: "30%", y: "26%" },
     spin: "38s",
     coords: { x: 17, y: 30 },
     size: 132,
@@ -95,6 +115,8 @@ export const cosmicSections: CosmicSection[] = [
       dark: "#2c1d16",
     },
     ring: false,
+    material: "fractured",
+    light: { x: "38%", y: "20%" },
     spin: "30s",
     coords: { x: 52, y: 18 },
     size: 176,
@@ -114,6 +136,8 @@ export const cosmicSections: CosmicSection[] = [
       dark: "#0d2740",
     },
     ring: true,
+    material: "banded",
+    light: { x: "26%", y: "30%" },
     spin: "26s",
     coords: { x: 82, y: 34 },
     size: 158,
@@ -133,6 +157,8 @@ export const cosmicSections: CosmicSection[] = [
       dark: "#241f3c",
     },
     ring: false,
+    material: "clay",
+    light: { x: "42%", y: "24%" },
     spin: "44s",
     coords: { x: 30, y: 68 },
     size: 122,
@@ -152,6 +178,8 @@ export const cosmicSections: CosmicSection[] = [
       dark: "#0f2b3f",
     },
     ring: true,
+    material: "fractured",
+    light: { x: "32%", y: "22%" },
     spin: "34s",
     coords: { x: 68, y: 70 },
     size: 138,
@@ -172,17 +200,20 @@ export function getSectionByHref(href: string): CosmicSection | undefined {
 
 /**
  * 首页中央主星球的配色。
- * 刻意与五颗分区行星区分：更冷、更亮、对比更强，突出「主入口」的地位。
+ *
+ * 换皮后换成「铜/赭石」大地色：原型里主星球是一颗有岩层纹理的行星，
+ * 靠受光面到暗面的暖冷过渡立住体积感，而不是靠冷蓝的科技感。
+ * 与五颗分区行星仍然区分：这里的明暗跨度更大，突出「主入口」的地位。
  */
 export const heroPlanet: PlanetPalette = {
-  light: "#f2fbff",
-  base: "#a9c3e6",
-  mid: "#44598a",
-  dark: "#080d1c",
+  light: "#f6e2c6",
+  base: "#c99a63",
+  mid: "#6b4a34",
+  dark: "#140f0b",
 };
 
-/** 首页主星球的边缘光 / 光晕颜色 */
-export const heroAccent = "#8fe3ff";
+/** 首页主星球的边缘光 / 光晕颜色（铜色，与 --copper 同源） */
+export const heroAccent = "#b98a5a";
 
 /**
  * 「关于」的页头元信息。

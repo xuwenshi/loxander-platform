@@ -50,8 +50,10 @@ export default async function AboutPage() {
             key={item.label}
             className="rounded-xl border border-border bg-elevated px-4 py-5 text-center"
           >
-            <dt className="text-xs text-muted">{item.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold text-foreground">
+            <dt className="font-mono text-[0.625rem] uppercase tracking-[0.16em] text-muted">
+              {item.label}
+            </dt>
+            <dd className="mt-1 font-serif text-3xl font-medium tabular-nums text-foreground">
               {item.value}
             </dd>
           </div>
@@ -60,7 +62,7 @@ export default async function AboutPage() {
 
       {/* 简介 */}
       <section className="mt-14">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+        <h2 className="font-serif text-xl font-medium tracking-tight text-foreground">
           我是谁
         </h2>
         <div className="mt-4 space-y-4">
@@ -97,7 +99,7 @@ export default async function AboutPage() {
 
       {/* 关注方向 */}
       <section className="mt-14 border-t border-border pt-10">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+        <h2 className="font-serif text-xl font-medium tracking-tight text-foreground">
           关注方向
         </h2>
         <ul className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -119,7 +121,7 @@ export default async function AboutPage() {
 
       {/* 技术栈 */}
       <section className="mt-14 border-t border-border pt-10">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+        <h2 className="font-serif text-xl font-medium tracking-tight text-foreground">
           技术栈
         </h2>
         <div className="mt-5 grid gap-5 sm:grid-cols-3">
@@ -128,7 +130,7 @@ export default async function AboutPage() {
               key={group.group}
               className="rounded-xl border border-border bg-elevated p-5"
             >
-              <h3 className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+              <h3 className="inline-flex items-center gap-2 font-serif text-sm font-medium text-foreground">
                 <LayersIcon width={15} height={15} className="text-accent" />
                 {group.group}
               </h3>
@@ -146,7 +148,7 @@ export default async function AboutPage() {
 
       {/* 经历 */}
       <section className="mt-14 border-t border-border pt-10">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">经历</h2>
+        <h2 className="font-serif text-xl font-medium tracking-tight text-foreground">经历</h2>
 
         <ol className="mt-5 space-y-6 border-l border-border pl-6">
           {siteConfig.experiences.map((item) => (
@@ -158,7 +160,7 @@ export default async function AboutPage() {
               <p className="text-xs font-medium uppercase tracking-wide text-muted">
                 {item.period}
               </p>
-              <h3 className="mt-1 text-base font-semibold text-foreground">
+              <h3 className="mt-1 font-serif text-base font-medium text-foreground">
                 {item.title}
                 <span className="ml-2 text-sm font-normal text-muted">{item.org}</span>
               </h3>
@@ -182,7 +184,7 @@ export default async function AboutPage() {
           ))}
         </ol>
 
-        <h3 className="mt-10 text-base font-semibold text-foreground">教育背景</h3>
+        <h3 className="mt-10 font-serif text-base font-medium text-foreground">教育背景</h3>
         <ul className="mt-4 space-y-3">
           {siteConfig.education.map((item) => (
             <li key={`${item.period}-${item.school}`} className="text-sm text-muted">

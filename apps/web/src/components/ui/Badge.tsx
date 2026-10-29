@@ -3,7 +3,15 @@ import type { ReactNode } from "react";
 
 import { tagHref } from "@/lib/tag-url";
 
-/** 标签样式的小圆角 chip，博客与项目共用 */
+/**
+ * 标签样式的小方角 chip，博客与项目共用。
+ *
+ * 换皮后从 `rounded-full`（胶囊）改成 `rounded-xs`（1px 直角）：
+ * 原型里所有标签都是 `.dossier .stack i { border-radius:1px }`
+ * （`_prototype/redesign.html:785`）与 `.sheet-meta i { border-radius:1px }`
+ * （`:1061`）—— 它们是铭牌上的刻字，不是聊天软件的胶囊。
+ * 全站 `rounded-full` 只剩「真正是圆的」东西：星球、状态点、色板点。
+ */
 export function Chip({
   children,
   className = "",
@@ -13,7 +21,7 @@ export function Chip({
 }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-muted ${className}`}
+      className={`inline-flex items-center rounded-xs border border-border bg-surface px-2.5 py-0.5 font-mono text-[0.6875rem] tracking-[0.06em] text-muted ${className}`}
     >
       {children}
     </span>
@@ -23,7 +31,7 @@ export function Chip({
 /** 技术栈 / 技能标签：等宽字体的小方块，about 与 resume 共用同一份样式 */
 export function TechChip({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-xs text-muted">
+    <span className="inline-flex items-center rounded-xs border border-border bg-surface px-2 py-0.5 font-mono text-[0.6875rem] tracking-[0.02em] text-muted">
       {children}
     </span>
   );
@@ -40,7 +48,7 @@ export function TagLink({ tag }: { tag: string }) {
   return (
     <Link
       href={tagHref(tag)}
-      className="inline-flex items-center rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-muted transition-colors hover:border-accent/60 hover:text-foreground"
+      className="inline-flex items-center rounded-xs border border-border bg-surface px-2.5 py-0.5 text-xs font-medium text-muted transition-colors hover:border-accent/60 hover:text-foreground"
     >
       {tag}
     </Link>
@@ -74,7 +82,7 @@ const STATUS_STYLES: Record<string, string> = {
 export function StatusBadge({ status }: { status: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full border bg-transparent px-2.5 py-0.5 text-xs font-medium ${
+      className={`inline-flex items-center rounded-xs border bg-transparent px-2.5 py-0.5 text-xs font-medium ${
         STATUS_STYLES[status] ?? STATUS_STYLES.archived
       }`}
     >

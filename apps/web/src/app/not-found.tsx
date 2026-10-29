@@ -21,12 +21,14 @@ export default function NotFound() {
     <div className="cosmic-scope flex min-h-svh flex-1 flex-col">
       <span aria-hidden className="cosmic-backdrop" />
 
-      <div className="relative flex flex-1 items-center overflow-hidden px-5 py-24 sm:px-8">
+      {/* relative z-10：同 error.tsx —— 子树内保持 backdrop(0) 在内容(10) 之下；
+          外层已经被 `.cosmic-scope` 的 z-3 抬到暗角/颗粒之上。 */}
+      <div className="relative z-10 flex flex-1 items-center overflow-hidden px-5 py-24 sm:px-8">
         <Starfield />
 
         <div className="cosmic-enter relative z-10 mx-auto w-full max-w-3xl">
-          <p className="font-mono text-sm font-medium text-cosmic-ice">404 · 偏离航线</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-cosmic-text sm:text-4xl">
+          <p className="font-mono text-sm font-medium text-accent">404 · 偏离航线</p>
+          <h1 className="mt-3 font-serif text-3xl font-medium tracking-tight text-cosmic-text sm:text-4xl">
             这颗星球不存在
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-cosmic-muted">
@@ -38,14 +40,14 @@ export default function NotFound() {
             <CosmicLink
               href="/"
               variant="warp"
-              className="inline-flex items-center gap-2 rounded-lg bg-cosmic-ice px-4 py-2.5 text-sm font-medium text-cosmic-void transition-opacity hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-on-accent transition-opacity hover:opacity-90"
             >
               回到星海入口
             </CosmicLink>
             <CosmicLink
               href="/universe"
               variant="warp"
-              className="inline-flex items-center gap-2 rounded-lg border border-cosmic-line bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-cosmic-text transition-colors hover:border-cosmic-ice/60"
+              className="inline-flex items-center gap-2 rounded-lg border border-cosmic-line bg-surface px-4 py-2.5 text-sm font-medium text-cosmic-text transition-colors hover:border-accent/60"
             >
               打开星图
               <ArrowRightIcon width={15} height={15} />

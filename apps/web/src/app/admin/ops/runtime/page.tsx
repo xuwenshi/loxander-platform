@@ -77,7 +77,7 @@ async function OpsRuntimeBody() {
 
   return (
     <div>
-      <h2 className="mt-6 text-lg font-semibold text-foreground">运行态</h2>
+      <h2 className="mt-6 font-serif text-lg font-medium text-foreground">运行态</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         这一页全部读「当前进程能看到的东西」：<code className="font-mono">.git/HEAD</code>、
         <code className="font-mono">.next/BUILD_ID</code>、<code className="font-mono">.next/static/css</code>、

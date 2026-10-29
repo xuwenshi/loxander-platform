@@ -1,40 +1,71 @@
 import type { CSSProperties } from "react";
 
-import type { CosmicSection } from "@/lib/cosmic";
+import type { PlanetPalette } from "@/lib/cosmic";
 
 /**
- * 纯 CSS 程序化星球（服务端组件，无 JS、无 Canvas）。
+ * 纯 CSS 星球（服务端组件，零 JS）。
  *
- * 为什么不用 Canvas：五颗分区行星只是装饰件，用 CSS 实现可以
- * ① 服务端渲染、无客户端开销；② 浏览器不支持 Canvas 时依然好看；
- * ③ reduced-motion 下自动静止。只有首页的中央主星球值得用 Canvas。
+ * 换皮后一颗星球由四层构成：
+ * - `__surface`：地表材质，由 `material` 决定（clay / banded / fractured），
+ *   它们不是简单换色，而是三种完全不同的纹理配方；
+ * - `__shade`：受光面 + 内阴影，光源方向由 `lightX` / `lightY` 控制，
+ *   因此五颗星球的高光位置可以各不相同，不会出现「一张皮换五个色」；
+ * - `__rim`：边缘辉光，取行星自己的强调色；
+ * - `__ring`：行星环，只在需要时渲染。
  *
- * 层次：body（球体渐变）→ surface（自转纹理）→ shade（受光/暗面）→ rim（边缘光）→ ring（光环）
+ * `--planet-spin` 控制自转一圈的时长（26s–44s 各不相同），
+ * `--planet-glow` 控制光晕半径（跟随直径缩放）。
  */
+
+export type PlanetMaterial = "clay" | "banded" | "fractured";
+
 export default function PlanetSphere({
-  section,
-  size,
+  planet,
+  diameter,
+  accent,
+  spin,
+  ring = false,
+  material = "clay",
+  lightX = "30%",
+  lightY = "26%",
   className = "",
 }: {
-  section: CosmicSection;
-  /** 覆盖默认直径（px）；不传则使用该分区在 cosmic.ts 里的基准尺寸 */
-  size?: number;
+  planet: PlanetPalette;
+  diameter: number;
+  accent: string;
+  spin: string;
+  ring?: boolean;
+  /** 地表材质：`clay` 细腻漫反射 / `banded` 纬向条带 / `fractured` 裂隙岩层 */
+  material?: PlanetMaterial;
+  /** 光源位置（球面上的百分比坐标），默认左上 */
+  lightX?: string;
+  lightY?: string;
   className?: string;
 }) {
-  const { planet, ring, spin, accent } = section;
-  const diameter = size ?? section.size;
-
   const vars = {
     width: `${diameter}px`,
     height: `${diameter}px`,
-    backgroundImage: `radial-gradient(circle at 32% 28%, ${planet.light} 0%, ${planet.base} 32%, ${planet.mid} 62%, ${planet.dark} 100%)`,
+    backgroundImage: `radial-gradient(circle at ${lightX} ${lightY}, ${planet.light} 0%, ${planet.base} 34%, ${planet.mid} 64%, ${planet.dark} 100%)`,
     "--planet-spin": spin,
     "--planet-accent": accent,
     "--planet-glow": `${Math.round(diameter * 0.28)}px`,
+    "--planet-light-x": lightX,
+    "--planet-light-y": lightY,
   } as CSSProperties;
 
+  const materialClass =
+    material === "banded"
+      ? "cosmic-planet--banded"
+      : material === "fractured"
+        ? "cosmic-planet--fractured"
+        : "";
+
   return (
-    <span aria-hidden className={`cosmic-planet ${className}`} style={vars}>
+    <span
+      aria-hidden
+      className={`cosmic-planet ${materialClass} ${className}`.trim()}
+      style={vars}
+    >
       <span className="cosmic-planet__surface" />
       <span className="cosmic-planet__shade" />
       <span className="cosmic-planet__rim" />

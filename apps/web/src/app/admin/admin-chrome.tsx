@@ -66,10 +66,16 @@ export function AdminChrome({
     item.exact ? pathname === item.href : pathname.startsWith(item.href);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background lg:flex-row">
+    // relative z-10：氛围层的暗角（z-1）与颗粒（z-2）都是 position:fixed，
+    // 后台这层外壳本身不定位就会被它们压住，深色主题下文字边缘会发黑。
+    // 取 10 与原型的内容分区同层（redesign.html:595/939）：高于暗角，
+    // 低于粒子浪潮（z-12）与导轨（z-40）。
+    // 这里刻意不带不透明的 bg-background：<body> 已经有同一枚令牌，去掉它
+    // 视觉零变化，却能让暗角与颗粒透上来（它们在下、内容在上，只当背景看）。
+    <div className="relative z-10 flex min-h-screen flex-col lg:flex-row">
       {/* 顶栏：移动端放抽屉按钮，桌面端只在左侧栏出现。 */}
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3 lg:hidden">
-        <span className="text-sm font-semibold text-foreground">后台</span>
+        <span className="font-serif text-sm font-medium text-foreground">后台</span>
         {/* h-11 w-11 + 居中：纯图标按钮的命中区域必须是 44×44（WCAG 2.5.5）。
             原来只有 p-2（8px×2）+ 16px 图标 = 32×32，在触屏上极易误触。 */}
         <button
@@ -92,7 +98,7 @@ export function AdminChrome({
       >
         <div className="flex h-full flex-col gap-6 p-4">
           <div className="hidden lg:block">
-            <p className="text-sm font-semibold tracking-tight text-foreground">Loxander 后台</p>
+            <p className="font-serif text-sm font-medium tracking-tight text-foreground">Loxander 后台</p>
             <p className="mt-1 text-xs text-muted">内容管理与发布</p>
           </div>
 

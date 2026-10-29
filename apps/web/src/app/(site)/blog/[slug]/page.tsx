@@ -96,7 +96,7 @@ export default async function PostPage({ params }: PostPageProps) {
         <div className="min-w-0">
           <article>
             <header className="border-b border-border pb-8">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarIcon width={13} height={13} />
                   <time dateTime={post.date}>{formatDate(post.date)}</time>
@@ -111,7 +111,7 @@ export default async function PostPage({ params }: PostPageProps) {
                 </span>
               </div>
 
-              <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+              <h1 className="mt-4 font-serif text-[clamp(1.75rem,3.6vw,2.5rem)] font-medium leading-[1.24] tracking-tight text-foreground">
                 {post.title}
               </h1>
 
@@ -192,7 +192,7 @@ export default async function PostPage({ params }: PostPageProps) {
 
           {related.length > 0 ? (
             <section className="mt-12 border-t border-border pt-8">
-              <h2 className="mb-4 text-lg font-semibold tracking-tight text-foreground">
+              <h2 className="mb-4 font-serif text-lg font-medium tracking-tight text-foreground">
                 相关文章
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">

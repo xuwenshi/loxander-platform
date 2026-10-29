@@ -18,7 +18,7 @@ export default function PostToc({
   return (
     <nav aria-label="文章目录">
       {title ? (
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+        <h2 className="mb-3 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-muted">
           {title}
         </h2>
       ) : null}

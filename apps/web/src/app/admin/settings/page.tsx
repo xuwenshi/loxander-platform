@@ -58,7 +58,7 @@ async function SettingsBody() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <header>
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">设置</h1>
+        <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">设置</h1>
         <p className="mt-1 text-sm text-muted">
           环境变量与能力开关的自检。本页只读 —— 按照方案 §13.5，生产环境变量只在
           Vercel 配置，改动请去 Vercel 控制台的 Project Settings → Environment
@@ -220,7 +220,7 @@ function ConfigStateBadge({ state }: { state: ConfigState }) {
   const tone = STATE_TONE[state];
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone}`}
+      className={`inline-flex shrink-0 items-center rounded-xs border px-2 py-0.5 font-mono text-[11px] tracking-[0.04em] ${tone}`}
     >
       {STATE_LABEL[state]}
     </span>
@@ -262,7 +262,7 @@ function CapabilitySection({ items }: { items: CapabilityItem[] }) {
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 align-top">
                   <span
-                    className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                    className={`inline-flex shrink-0 items-center rounded-xs border px-2 py-0.5 font-mono text-[11px] tracking-[0.04em] ${
                       item.enabled
                         ? "border-success/35 text-success"
                         : "border-border text-muted"

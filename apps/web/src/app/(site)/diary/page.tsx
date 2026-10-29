@@ -54,7 +54,7 @@ export default async function DiaryPage() {
                   href={`/diary/${entry.slug}`}
                   className="group block rounded-xl border border-border bg-elevated px-4 py-4 transition-colors hover:border-accent/50"
                 >
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.625rem] uppercase tracking-[0.14em] text-muted">
                     <span className="inline-flex items-center gap-1.5">
                       <CalendarIcon width={13} height={13} />
                       <time dateTime={entry.date}>{formatDate(entry.date)}</time>
@@ -62,7 +62,7 @@ export default async function DiaryPage() {
                     {entry.mood ? <span>· {entry.mood}</span> : null}
                   </div>
 
-                  <h2 className="mt-2 text-base font-semibold tracking-tight text-foreground">
+                  <h2 className="mt-2 font-serif text-base font-medium tracking-tight text-foreground">
                     {entry.title}
                   </h2>
 
@@ -79,7 +79,7 @@ export default async function DiaryPage() {
                       ))}
                     </ul>
 
-                    <span className="inline-flex items-center gap-1 text-sm font-medium text-accent">
+                    <span className="inline-flex items-center gap-1 font-mono text-[0.625rem] uppercase tracking-[0.16em] text-accent">
                       阅读
                       <ArrowRightIcon
                         width={15}

@@ -12,6 +12,9 @@ import type { CosmicSection } from "@/lib/cosmic";
  * ② 分区识别色的 eyebrow（文字仍走主题色 text-accent 以保证对比度，
  *   只在旁边放一个极小的识别色圆点，颜色不承担阅读职责）；
  * ③ 入场动效（cosmic-enter），reduced-motion 下由全局兜底自动关闭。
+ *
+ * 换皮后：标题改为衬线体并放大，eyebrow 改为等宽字母间距 ——
+ * 这是全站最容易辨认「观测站」身份的一处版式信号。
  */
 export default function SectionIntro({
   section,
@@ -29,13 +32,13 @@ export default function SectionIntro({
       <CosmicLink
         href="/universe"
         variant="warp"
-        className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
+        className="inline-flex min-h-11 items-center gap-1.5 text-sm text-muted transition-colors hover:text-foreground"
       >
         <ArrowLeftIcon width={15} height={15} />
         返回星图
       </CosmicLink>
 
-      <p className="mt-5 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-accent">
+      <p className="mt-4 inline-flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.22em] text-accent">
         <span
           aria-hidden
           className="h-1.5 w-1.5 rounded-full"
@@ -44,7 +47,7 @@ export default function SectionIntro({
         {section.latin}
       </p>
 
-      <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+      <h1 className="mt-3 font-serif text-[clamp(1.875rem,4vw,2.75rem)] font-medium leading-[1.2] tracking-tight text-foreground">
         {title}
       </h1>
 

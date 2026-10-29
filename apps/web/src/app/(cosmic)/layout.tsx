@@ -7,12 +7,14 @@ import CosmicChrome from "@/components/cosmic/CosmicChrome";
  * 宇宙层外壳：/（星海入口）与 /universe（行星星图）。
  *
  * 关键点：`.cosmic-scope` 直接出现在服务端输出的 HTML 里，因此
- * 深空底色与滚动区域底色在首屏就已经正确，不会出现「先白后黑」的闪屏。
+ * 底色与滚动区域底色在首屏就已经正确，不会出现「先白后黑」的闪屏。
  */
 
-/* 宇宙层恒定深空，浏览器 UI 的底色也跟随，避免亮色主题下顶部出现一条白条 */
+/* 换皮后宇宙层也跟随主题：深色是夜空 #05070a，浅色是暖白纸 #f6f2e9。
+   这里声明深色默认值（与 layout.tsx 的 THEME_COLORS.dark 一致），
+   浅色用户由 ThemeToggle 在客户端修正。 */
 export const viewport: Viewport = {
-  themeColor: "#03040a",
+  themeColor: "#05070a",
 };
 
 export default function CosmicLayout({ children }: { children: ReactNode }) {

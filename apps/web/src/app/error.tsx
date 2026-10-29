@@ -35,7 +35,11 @@ export default function Error({
     <div className="cosmic-scope flex min-h-svh flex-1 flex-col">
       <span aria-hidden className="cosmic-backdrop" />
 
-      <div className="relative flex flex-1 items-center overflow-hidden px-5 py-24 sm:px-8">
+      {/* relative z-10：氛围层的暗角(z-1)/颗粒(z-2) 是 position:fixed，
+          内容不定位就会被压黑。`.cosmic-scope` 自己已经取 z-3（见 globals.css），
+          所以外层已足够；这一层仍留着 `relative z-10` 是为了让 backdrop(0)
+          与内容(10) 在子树内保持原型那样的前后关系，同时不影响外层次序。 */}
+      <div className="relative z-10 flex flex-1 items-center overflow-hidden px-5 py-24 sm:px-8">
         <Starfield />
 
         <div className="cosmic-enter relative z-10 mx-auto w-full max-w-3xl">
@@ -43,7 +47,7 @@ export default function Error({
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-error" />
             航线异常 · 系统故障
           </p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-cosmic-text sm:text-4xl">
+          <h1 className="mt-3 font-serif text-3xl font-medium tracking-tight text-cosmic-text sm:text-4xl">
             这一段航线出了问题
           </h1>
           <p className="mt-4 max-w-xl text-base leading-relaxed text-cosmic-muted">
@@ -55,13 +59,13 @@ export default function Error({
             <button
               type="button"
               onClick={reset}
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-cosmic-ice px-4 text-sm font-medium text-cosmic-void transition-opacity hover:opacity-90"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-on-accent transition-opacity hover:opacity-90"
             >
               重新尝试
             </button>
             <Link
               href="/"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-cosmic-line bg-white/[0.04] px-4 text-sm font-medium text-cosmic-text transition-colors hover:border-cosmic-ice/60"
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-cosmic-line bg-surface px-4 text-sm font-medium text-cosmic-text transition-colors hover:border-accent/60"
             >
               回到星海入口
               <ArrowRightIcon width={15} height={15} />

@@ -62,7 +62,7 @@ async function DashboardBody() {
     <div className="mx-auto w-full max-w-5xl">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">总览</h1>
+          <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">总览</h1>
           <p className="mt-1 text-sm text-muted">
             内容状态一览与最近改动。所有写操作都会留下版本快照与审计记录。
           </p>
@@ -86,7 +86,7 @@ async function DashboardBody() {
                 className="rounded-xl border border-border bg-elevated p-4 transition-colors hover:border-accent/50"
               >
                 <p className="text-sm font-medium text-foreground">{KIND_LABELS[kind]}</p>
-                <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground">
+                <p className="mt-2 font-mono text-2xl font-medium tabular-nums text-foreground">
                   {row.total}
                 </p>
                 <dl className="mt-3 space-y-1 text-xs">
@@ -103,7 +103,7 @@ async function DashboardBody() {
 
       <section className="mt-8" aria-label="最近改动">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground">最近改动</h2>
+          <h2 className="font-serif text-sm font-medium text-foreground">最近改动</h2>
           <Link href="/admin/content?sort=updated" className="text-xs text-accent hover:underline">
             查看全部
           </Link>
@@ -199,7 +199,7 @@ function StatLine({
 /** 缺库时的落地页：说清楚「为什么」和「怎么办」。 */function MissingDatabase() {
   return (
     <div className="mx-auto w-full max-w-2xl">
-      <h1 className="text-xl font-semibold tracking-tight text-foreground">后台尚未连接数据库</h1>
+      <h1 className="font-serif text-xl font-medium tracking-tight text-foreground">后台尚未连接数据库</h1>
       <p className="mt-3 text-sm leading-relaxed text-muted">
         后台的所有操作都直接读写 Postgres，没有 <code className="font-mono">DATABASE_URL</code>{" "}
         就没有任何内容可显示。这不是权限问题，是配置缺失。

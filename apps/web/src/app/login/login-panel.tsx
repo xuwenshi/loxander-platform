@@ -19,7 +19,7 @@ import { signInWithGitHubAction } from "@/lib/admin/login-actions";
 export function LoginPanel({ error }: { error: string | null }) {
   return (
     <div className="rounded-2xl border border-border bg-elevated p-8">
-      <h1 className="text-lg font-semibold tracking-tight text-foreground">后台登录</h1>
+      <h1 className="font-serif text-lg font-medium tracking-tight text-foreground">后台登录</h1>
       <p className="mt-2 text-sm leading-relaxed text-muted">
         使用 GitHub 账号登录。只有管理员名单内的账号可以进入。
       </p>

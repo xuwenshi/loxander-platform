@@ -253,7 +253,7 @@ export function EntryEditor({
         {/* ── 右列：元数据 ──────────────────────────────────────────── */}
         <aside className="space-y-4">
           <div className="rounded-xl border border-border bg-elevated p-4">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">
+            <h2 className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.18em] text-muted">
               {kindLabel}字段
             </h2>
             <div className="mt-3 space-y-3">
@@ -430,7 +430,7 @@ export function EntryEditor({
 
           {kind === "goals" ? (
             <div className="rounded-xl border border-border bg-elevated p-4">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">里程碑</h2>
+              <h2 className="font-mono text-[0.625rem] font-medium uppercase tracking-[0.18em] text-muted">里程碑</h2>
               <div className="mt-3 space-y-2">
                 {milestones.map((milestone, index) => (
                   <div key={index} className="flex items-center gap-2">

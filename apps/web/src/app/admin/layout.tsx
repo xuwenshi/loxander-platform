@@ -95,10 +95,19 @@ async function AdminGuard({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** 守卫求值期间的外壳。刻意只画骨架，不泄漏任何内容。 */
+/**
+ * 守卫求值期间的外壳。刻意只画骨架，不泄漏任何内容。
+ *
+ * `relative z-10` 与 admin-chrome.tsx 的外壳同一个理由：氛围层的暗角（z-1）
+ * 与颗粒（z-2）是 position:fixed，这层不定位就会落在它们下面 —— 深色主题的
+ * `--vig-2` 是 88% 近黑，连「正在校验身份…」这行字一起被压黑。
+ *
+ * 不铺 `bg-background`：抬到 z-10 之后它会把暗角与颗粒整块挡掉。`<body>`
+ * 上已有同一枚令牌，视觉零变化，纸的质感却能透上来（与 admin-chrome 一致）。
+ */
 function AdminBootScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="relative z-10 flex min-h-screen items-center justify-center">
       <p className="text-sm text-muted">正在校验身份…</p>
     </div>
   );

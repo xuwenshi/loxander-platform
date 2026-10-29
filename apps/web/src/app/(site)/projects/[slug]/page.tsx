@@ -74,7 +74,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 {project.role ? <Chip>{project.role}</Chip> : null}
               </div>
 
-              <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+              <h1 className="mt-4 font-serif text-[clamp(1.75rem,3.6vw,2.5rem)] font-medium leading-[1.24] tracking-tight text-foreground">
                 {project.name}
               </h1>
 
@@ -137,7 +137,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
 
           {linkedPost ? (
             <section className="mt-12 border-t border-border pt-8">
-              <h2 className="mb-3 text-lg font-semibold tracking-tight text-foreground">
+              <h2 className="mb-3 font-serif text-lg font-medium tracking-tight text-foreground">
                 相关文章
               </h2>
               <CosmicLink

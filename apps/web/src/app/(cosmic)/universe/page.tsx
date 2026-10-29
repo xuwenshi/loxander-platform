@@ -43,15 +43,15 @@ export default async function UniversePage() {
             返回星海入口
           </CosmicLink>
 
-          <p className="mt-6 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.28em] text-cosmic-ice">
-            <span aria-hidden className="cosmic-pulse h-1.5 w-1.5 rounded-full bg-cosmic-ice" />
+          <p className="mt-6 inline-flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.24em] text-accent">
+            <span aria-hidden className="cosmic-pulse h-1.5 w-1.5 rounded-full bg-accent" />
             Star Map
           </p>
 
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-cosmic-text sm:text-4xl">
+          <h1 className="mt-3 font-serif text-[clamp(1.875rem,4vw,2.75rem)] font-medium leading-[1.2] tracking-tight text-foreground">
             星图
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-cosmic-muted">
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">
             五颗行星，五个分区。选择一颗进入 —— 简历、项目、文章、日记、目标。
           </p>
         </header>

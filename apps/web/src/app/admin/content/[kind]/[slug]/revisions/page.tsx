@@ -75,7 +75,7 @@ async function RevisionsBody({ params }: { params: RevisionsPageParams }) {
     <>
       <header className="mt-3 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold tracking-tight text-foreground">
+          <h1 className="truncate font-serif text-xl font-medium tracking-tight text-foreground">
             版本历史
           </h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">

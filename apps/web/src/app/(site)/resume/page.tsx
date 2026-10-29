@@ -71,13 +71,13 @@ export default function ResumePage() {
 
       {/* 概述 */}
       <section className="mt-12 border-t border-border pt-8">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">概述</h2>
+        <h2 className="font-serif text-lg font-medium tracking-tight text-foreground">概述</h2>
         <p className="mt-3 text-sm leading-relaxed text-muted">{siteConfig.bio[0]}</p>
       </section>
 
       {/* 经历 */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">工作与项目经历</h2>
+        <h2 className="font-serif text-lg font-medium tracking-tight text-foreground">工作与项目经历</h2>
 
         <div className="mt-5 space-y-6">
           {siteConfig.experiences.map((item) => (
@@ -86,7 +86,7 @@ export default function ResumePage() {
               className="rounded-xl border border-border bg-elevated p-5"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-base font-semibold text-foreground">{item.title}</h3>
+                <h3 className="font-serif text-base font-medium text-foreground">{item.title}</h3>
                 <p className="text-xs font-medium text-muted">{item.period}</p>
               </div>
               <p className="mt-1 text-sm text-muted">{item.org}</p>
@@ -114,7 +114,7 @@ export default function ResumePage() {
 
       {/* 技能 */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">技能</h2>
+        <h2 className="font-serif text-lg font-medium tracking-tight text-foreground">技能</h2>
 
         <dl className="mt-5 space-y-4">
           {siteConfig.techStack.map((group) => (
@@ -150,7 +150,7 @@ export default function ResumePage() {
 
       {/* 教育 */}
       <section className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">教育背景</h2>
+        <h2 className="font-serif text-lg font-medium tracking-tight text-foreground">教育背景</h2>
         <ul className="mt-5 space-y-4">
           {siteConfig.education.map((item) => (
             <li
@@ -158,7 +158,7 @@ export default function ResumePage() {
               className="rounded-xl border border-border bg-elevated p-5"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-base font-semibold text-foreground">{item.school}</h3>
+                <h3 className="font-serif text-base font-medium text-foreground">{item.school}</h3>
                 <p className="text-xs font-medium text-muted">{item.period}</p>
               </div>
               <p className="mt-1 text-sm text-muted">{item.major}</p>

@@ -81,12 +81,12 @@ export default function SearchPage({ searchParams }: SearchPageProps) {
               maxLength={SEARCH_MAX_QUERY_LENGTH}
               placeholder="例：RAG、向量检索、缓存"
               autoComplete="off"
-              className="min-h-11 w-full rounded-full border border-border bg-surface pl-9 pr-4 text-sm text-foreground placeholder:text-muted-deep focus:border-border-focus focus:outline-none"
+              className="min-h-11 w-full rounded-xs border border-border bg-surface pl-9 pr-4 text-sm text-foreground placeholder:text-muted-deep focus:border-border-focus focus:outline-none"
             />
           </div>
           <button
             type="submit"
-            className="inline-flex min-h-11 items-center rounded-full border border-accent bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+            className="inline-flex min-h-11 items-center rounded-xs border border-accent bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
           >
             搜索
           </button>

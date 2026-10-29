@@ -30,7 +30,7 @@ export function AdminStatusPill({ status }: { status: string }) {
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone}`}
+      className={`inline-flex shrink-0 items-center rounded-xs border px-2 py-0.5 font-mono text-[11px] tracking-[0.04em] ${tone}`}
     >
       {label}
     </span>
