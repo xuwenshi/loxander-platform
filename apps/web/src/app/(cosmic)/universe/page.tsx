@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import "./orrery.css";
+
 import PostCard from "@/components/blog/PostCard";
 import CosmicLink from "@/components/cosmic/CosmicLink";
 import Starfield from "@/components/cosmic/Starfield";
@@ -33,7 +35,7 @@ export default async function UniversePage() {
     <div className="relative flex-1">
       <Starfield />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col px-5 py-14 sm:px-8 sm:py-16">
+      <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col px-5 py-14 sm:px-8 sm:py-16">
         <header className="cosmic-enter">
           <CosmicLink
             href="/"

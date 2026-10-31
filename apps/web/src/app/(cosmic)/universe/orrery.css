@@ -1,0 +1,824 @@
+/* 星图 · 立体轨道盘（设计稿 v13-B 的仪器层）
+ *
+ * 来源：`_prototype/universe-draft-b.html`，落地时做了三件事：
+ *   1. 颜色全部换成站点令牌（`--copper-rgb` / `--warm-rgb` / `--ink-rgb` / `--foreground` …），
+ *      这样可以跟着明暗主题与强调色一起变，而不是把铜金写死；
+ *   2. 去掉页面外壳规则（导航、书脊、底部三格），只保留盘面本身，
+ *      排版交给页面里的 Tailwind 栅格；
+ *   3. 滚轮缩放去掉 —— 在真实页面里劫持滚轮会和页面滚动打架，只保留拖拽改相位。
+ *
+ * 盘面的坐标系是固定的 700×680 设计像素，由 `.orrery` 的 `--k` 整体缩放，
+ * 所以下面所有数值都按设计稿写死，改尺寸只改 `--k`。
+ */
+
+.orrery {
+  --k: 1;
+  position: relative;
+  width: 700px;
+  height: 680px;
+  cursor: grab;
+  touch-action: pan-y;
+  transform: scale(var(--k));
+  transform-origin: 0 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.orrery.is-drag {
+  cursor: grabbing;
+}
+
+.orrery__plate {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* ───────────────────────── 扫描束 ───────────────────────── */
+
+.orrery__sweep {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 612px;
+  height: 584px;
+  margin: -292px 0 0 -306px;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 0;
+  opacity: 0.8;
+  transform: rotate(-12deg) scaleY(0.58);
+  pointer-events: none;
+}
+
+.orrery__sweep i {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(var(--warm-rgb), 0.16) 0deg,
+    rgba(var(--warm-rgb), 0.055) 6deg,
+    rgba(var(--warm-rgb), 0.014) 16deg,
+    transparent 26deg,
+    transparent 360deg
+  );
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 15%,
+    rgba(0, 0, 0, 0.3) 33%,
+    #000 70%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0 15%,
+    rgba(0, 0, 0, 0.3) 33%,
+    #000 70%
+  );
+  animation: orrery-sweep 26s linear infinite;
+  will-change: transform;
+}
+
+.orrery__sweep i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 50%;
+  height: 1px;
+  transform-origin: 0 50%;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--warm-rgb), 0.42),
+    rgba(var(--warm-rgb), 0.06) 60%,
+    transparent
+  );
+}
+
+@keyframes orrery-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ───────────────────────── 十字轴 ───────────────────────── */
+
+.orrery__axis,
+.orrery__axis--v {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(var(--ink-rgb), 0.15) 0 4px,
+    transparent 4px 10px
+  );
+}
+
+.orrery__axis {
+  left: 0;
+  top: 340px;
+  width: 100%;
+  height: 1px;
+}
+
+.orrery__axis--v {
+  left: 350px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(var(--ink-rgb), 0.15) 0 4px,
+    transparent 4px 10px
+  );
+}
+
+/* ───────────────────────── 仪器框 / 刻度尺 / 扫描线 ───────────────────────── */
+
+.orrery__frame {
+  position: absolute;
+  inset: 7px;
+  z-index: 9;
+  pointer-events: none;
+  border: 1px solid rgba(var(--copper-rgb), 0.13);
+  background-repeat: no-repeat;
+  background-image: linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5)),
+    linear-gradient(rgba(var(--warm-rgb), 0.5), rgba(var(--warm-rgb), 0.5));
+  background-size: 15px 1px, 1px 15px, 15px 1px, 1px 15px, 15px 1px, 1px 15px, 15px 1px,
+    1px 15px;
+  background-position: 0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%;
+}
+
+.orrery__rule-x,
+.orrery__rule-y {
+  position: absolute;
+  z-index: 9;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+
+.orrery__rule-x {
+  left: 22px;
+  right: 22px;
+  top: 7px;
+  height: 7px;
+  background-image: repeating-linear-gradient(
+      90deg,
+      rgba(var(--ink-rgb), 0.3) 0 1px,
+      transparent 1px 13px
+    ),
+    repeating-linear-gradient(90deg, rgba(var(--ink-rgb), 0.55) 0 1px, transparent 1px 65px);
+  background-size: 100% 3px, 100% 7px;
+}
+
+.orrery__rule-y {
+  top: 22px;
+  bottom: 22px;
+  left: 7px;
+  width: 7px;
+  background-image: repeating-linear-gradient(
+      180deg,
+      rgba(var(--ink-rgb), 0.3) 0 1px,
+      transparent 1px 13px
+    ),
+    repeating-linear-gradient(180deg, rgba(var(--ink-rgb), 0.55) 0 1px, transparent 1px 65px);
+  background-size: 3px 100%, 7px 100%;
+}
+
+.orrery__scan {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(var(--ink-rgb), 0.02) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.orrery__scanbar {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 0;
+  height: 1px;
+  z-index: 9;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--warm-rgb), 0.45) 18%,
+    rgba(var(--warm-rgb), 0.45) 82%,
+    transparent
+  );
+  box-shadow: 0 0 14px rgba(var(--warm-rgb), 0.3);
+  animation: orrery-scan 9s linear infinite;
+}
+
+@keyframes orrery-scan {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(666px);
+  }
+}
+
+/* ───────────────────────── 盘心主星 ───────────────────────── */
+
+/* z-index:3 是刻意的：夹在后侧行星（z2）与前侧行星（z4）之间，才有纵深 */
+.orrery__core {
+  position: absolute;
+  left: 350px;
+  top: 340px;
+  width: 0;
+  height: 0;
+  z-index: 3;
+}
+
+.orrery__core-h,
+.orrery__core-x,
+.orrery__core-d,
+.orrery__core-p {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+}
+
+.orrery__core-h {
+  width: 80px;
+  height: 80px;
+  margin: -40px 0 0 -40px;
+  background: radial-gradient(circle, rgba(var(--warm-rgb), 0.085), rgba(var(--warm-rgb), 0) 70%);
+}
+
+.orrery__core-x {
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 0;
+  opacity: 0.24;
+  background-image: linear-gradient(rgba(var(--warm-rgb), 0.9), rgba(var(--warm-rgb), 0.9)),
+    linear-gradient(rgba(var(--warm-rgb), 0.9), rgba(var(--warm-rgb), 0.9));
+  background-size: 54px 1px, 1px 54px;
+  background-position: 50% 50%, 50% 50%;
+  background-repeat: no-repeat;
+}
+
+.orrery__core-d {
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  background: radial-gradient(
+    circle,
+    rgba(var(--warm-rgb), 0.95) 0%,
+    rgba(var(--warm-rgb), 0.55) 55%,
+    rgba(var(--warm-rgb), 0.1) 100%
+  );
+  box-shadow: 0 0 14px 3px rgba(var(--warm-rgb), 0.35);
+}
+
+.orrery__core-p {
+  width: 60px;
+  height: 60px;
+  margin: -30px 0 0 -30px;
+  border: 1px solid rgba(var(--warm-rgb), 0.45);
+  opacity: 0;
+  animation: orrery-pulsar 5.2s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+.orrery__core-p--b {
+  animation-delay: 2.6s;
+}
+
+@keyframes orrery-pulsar {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.6;
+  }
+  70% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+/* ───────────────────────── 行星 ───────────────────────── */
+
+.orb {
+  position: absolute;
+  left: 350px;
+  top: 340px;
+  width: 0;
+  height: 0;
+  z-index: 3;
+  outline: none;
+  will-change: transform;
+}
+
+.orb__glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--d) * 5.2);
+  height: calc(var(--d) * 5.2);
+  margin: calc(var(--d) * -2.6) 0 0 calc(var(--d) * -2.6);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--base) 0%, rgba(0, 0, 0, 0) 68%);
+  opacity: 0.16;
+}
+
+.orb__ball {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--d);
+  height: var(--d);
+  margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 26%,
+    var(--light) 0%,
+    var(--base) 24%,
+    var(--mid) 56%,
+    var(--dark) 88%
+  );
+  box-shadow: inset 0 0 0 1px rgba(var(--warm-rgb), 0.16),
+    inset -3px -5px 12px rgba(0, 0, 0, 0.55);
+  transition: box-shadow 0.18s ease;
+}
+
+.orb__cross {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--d) + 20px);
+  height: calc(var(--d) + 20px);
+  margin: calc((var(--d) + 20px) / -2) 0 0 calc((var(--d) + 20px) / -2);
+  opacity: 0.5;
+  background-image: linear-gradient(rgba(var(--warm-rgb), 0.62), rgba(var(--warm-rgb), 0.62)),
+    linear-gradient(rgba(var(--warm-rgb), 0.62), rgba(var(--warm-rgb), 0.62)),
+    linear-gradient(rgba(var(--warm-rgb), 0.62), rgba(var(--warm-rgb), 0.62)),
+    linear-gradient(rgba(var(--warm-rgb), 0.62), rgba(var(--warm-rgb), 0.62));
+  background-size: 9px 1px, 9px 1px, 1px 9px, 1px 9px;
+  background-position: 50% 0, 50% 100%, 0 50%, 100% 50%;
+  background-repeat: no-repeat;
+  transition: opacity 0.18s ease;
+}
+
+.orb__tag {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.orb__tag b {
+  display: block;
+  font-family: var(--font-stack-serif);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--foreground);
+}
+
+.orb__tag i {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-stack-mono);
+  font-size: 6.5px;
+  font-style: normal;
+  letter-spacing: 0.17em;
+  color: var(--muted);
+}
+
+.orb.is-hot .orb__ball {
+  box-shadow: inset 0 0 0 1px rgba(var(--warm-rgb), 0.3), inset -3px -5px 12px rgba(0, 0, 0, 0.5),
+    0 0 20px 2px rgba(var(--warm-rgb), 0.34);
+}
+
+.orb.is-hot .orb__cross,
+.orb:focus-visible .orb__cross {
+  opacity: 1;
+}
+
+.orb:focus-visible .orb__ball {
+  box-shadow: inset 0 0 0 1px rgba(var(--warm-rgb), 0.5), 0 0 0 3px rgba(var(--copper-rgb), 0.55);
+}
+
+/* ───────────────────────── 锁定框 ───────────────────────── */
+
+.orrery__lock {
+  --ls: 70px;
+  position: absolute;
+  left: 350px;
+  top: 340px;
+  width: 0;
+  height: 0;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+}
+
+.orrery__lock.is-on {
+  opacity: 1;
+}
+
+.orrery__lock i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(var(--warm-rgb), 0.92);
+}
+
+/* 注意用 nth-of-type：`.orrery__lock` 的第一个子元素是圆环，nth-child 会整体错位一格 */
+.orrery__lock i:nth-of-type(1) {
+  left: calc(var(--ls) / -2);
+  top: calc(var(--ls) / -2);
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.orrery__lock i:nth-of-type(2) {
+  right: calc(var(--ls) / -2);
+  top: calc(var(--ls) / -2);
+  border-left: 0;
+  border-bottom: 0;
+}
+
+.orrery__lock i:nth-of-type(3) {
+  left: calc(var(--ls) / -2);
+  bottom: calc(var(--ls) / -2);
+  border-right: 0;
+  border-top: 0;
+}
+
+.orrery__lock i:nth-of-type(4) {
+  right: calc(var(--ls) / -2);
+  bottom: calc(var(--ls) / -2);
+  border-left: 0;
+  border-top: 0;
+}
+
+.orrery__lock-ring {
+  position: absolute;
+  left: calc(var(--ls) / -2);
+  top: calc(var(--ls) / -2);
+  width: var(--ls);
+  height: var(--ls);
+  border: 1px dashed rgba(var(--warm-rgb), 0.42);
+  border-radius: 50%;
+  animation: orrery-ring 7s linear infinite;
+}
+
+@keyframes orrery-ring {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ───────────────────────── 读数条（横跨盘底） ───────────────────────── */
+
+/* 环带最低点 y≈512，加上球半径与标签后约 571，盘高 680，
+   所以这条从 594 起，任何相位都不会被行星压住。 */
+.hud {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 10px;
+  height: 88px;
+  z-index: 9;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: center;
+  gap: 0 16px;
+  padding: 10px 16px 9px;
+  border: 1px solid rgba(var(--copper-rgb), 0.36);
+  border-left: 2px solid rgba(var(--copper-rgb), 0.55);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--copper-rgb), 0.055),
+    rgba(var(--scrim-rgb), 0.9) 22%,
+    rgba(var(--scrim-rgb), 0.86)
+  );
+  box-shadow: inset 0 1px 0 rgba(var(--warm-rgb), 0.09);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.hud::before,
+.hud::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 1px solid rgba(var(--warm-rgb), 0.55);
+}
+
+.hud::before {
+  left: -1px;
+  top: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.hud::after {
+  right: -1px;
+  bottom: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.orrery.is-hot .hud {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hud__eye {
+  position: relative;
+  margin: 0;
+  padding-right: 14px;
+  border-right: 1px solid rgba(var(--ink-rgb), 0.12);
+  font-family: var(--font-stack-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.22em;
+  color: var(--accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hud__eye::after {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 7px;
+  margin-left: 7px;
+  vertical-align: -1px;
+  background: var(--accent);
+  animation: hud-caret 1.15s steps(1) infinite;
+}
+
+@keyframes hud-caret {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.hud__name {
+  margin: 0;
+  font-family: var(--font-stack-serif);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--foreground);
+  white-space: nowrap;
+}
+
+.hud__latin {
+  margin: 0;
+  padding-right: 14px;
+  border-right: 1px solid rgba(var(--ink-rgb), 0.12);
+  font-family: var(--font-stack-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hud ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex: 1 0 100%;
+  gap: 20px;
+  min-width: 0;
+  overflow: hidden;
+  counter-reset: hud-i;
+}
+
+.hud li {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 300px;
+  padding: 0 0 0 20px;
+  overflow: hidden;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  counter-increment: hud-i;
+}
+
+.hud li::before {
+  content: counter(hud-i, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-stack-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  color: rgba(var(--warm-rgb), 0.55);
+}
+
+.hud__meta {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  margin: 0;
+  font-family: var(--font-stack-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+  text-transform: uppercase;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── 指针读数 / 十字线 ───────────────────────── */
+
+.orrery__coord {
+  position: absolute;
+  right: 16px;
+  bottom: 94px;
+  z-index: 10;
+  pointer-events: none;
+  text-align: right;
+  font-family: var(--font-stack-mono);
+  font-size: 8px;
+  line-height: 1.75;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+}
+
+.orrery__coord b {
+  font-weight: 400;
+  color: rgba(var(--copper-rgb), 0.9);
+}
+
+.orrery__xh,
+.orrery__xh--v {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(var(--warm-rgb), 0.2);
+  transition: opacity 0.22s ease;
+}
+
+.orrery__xh {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+}
+
+.orrery__xh--v {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.orrery.has-cursor .orrery__xh {
+  opacity: 1;
+}
+
+/* ───────────────────────── 角落标记 ───────────────────────── */
+
+.orrery__cnr {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  font-family: var(--font-stack-mono);
+  font-size: 7px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.orrery__cnr--tl {
+  left: 26px;
+  top: 19px;
+}
+
+.orrery__cnr--tr {
+  right: 26px;
+  top: 19px;
+}
+
+.orrery__zone {
+  position: absolute;
+  left: 146px;
+  top: 168px;
+  z-index: 3;
+  pointer-events: none;
+  font-family: var(--font-stack-mono);
+  font-size: 7px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(var(--copper-rgb), 0.55);
+  transform: rotate(-12deg);
+}
+
+/* ───────────────────────── 盘面 SVG ───────────────────────── */
+
+.orrery__grid-line {
+  fill: none;
+  stroke: rgba(var(--ink-rgb), 0.06);
+  stroke-width: 1;
+}
+
+.orrery__sec-edge {
+  fill: none;
+  stroke: rgba(var(--copper-rgb), 0.22);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+
+.orrery__hatch-line {
+  stroke: rgba(var(--copper-rgb), 0.16);
+  stroke-width: 1;
+}
+
+.orrery__ring {
+  fill: none;
+  stroke: rgba(var(--warm-rgb), 0.14);
+  stroke-width: 1;
+  stroke-dasharray: 2 9;
+}
+
+.orrery__orbit {
+  fill: none;
+  stroke: rgba(var(--warm-rgb), 0.16);
+  stroke-width: 1;
+}
+
+.orrery__tick {
+  stroke: rgba(var(--ink-rgb), 0.3);
+  stroke-width: 1;
+}
+
+.orrery__tick--major {
+  stroke: rgba(var(--warm-rgb), 0.5);
+  stroke-width: 1;
+}
+
+.orrery__az {
+  fill: rgba(var(--ink-rgb), 0.5);
+  font-family: var(--font-stack-mono);
+  font-size: 7px;
+  letter-spacing: 0.18em;
+}
+
+.orrery__trail {
+  fill: none;
+  stroke: rgba(var(--warm-rgb), 0.3);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+}
+
+/* ───────────────────────── 减动效 ───────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .orrery__sweep i,
+  .orrery__scanbar,
+  .orrery__lock-ring,
+  .orrery__core-p,
+  .hud__eye::after {
+    animation: none !important;
+  }
+}
