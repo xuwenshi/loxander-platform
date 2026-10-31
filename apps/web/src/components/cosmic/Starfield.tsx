@@ -121,11 +121,30 @@ export default function Starfield({ className = "" }: { className?: string }) {
      * getComputedStyle 会强制样式重算，几百个粒子就够把帧率拖下去。
      */
     let starRGB = "255,255,255";
+    /**
+     * 预拼好的填充色表：`fillStyle` 是 canvas 状态，每帧改两三百次字符串代价
+     * 不低（每次都要分配一个新字符串）。把 alpha 量化成 1/100 一档预拼好，
+     * 逐帧只剩数组取值 —— 与粒子浪潮里的做法一致。
+     */
+    const ALPHA_STEP = 100;
+    let starStyles: string[] = [];
+    let glowStyles: string[] = [];
+    const buildStarStyles = () => {
+      starStyles = new Array<string>(ALPHA_STEP + 1);
+      glowStyles = new Array<string>(ALPHA_STEP + 1);
+      for (let i = 0; i <= ALPHA_STEP; i += 1) {
+        const a = i / ALPHA_STEP;
+        starStyles[i] = `rgba(${starRGB},${a.toFixed(3)})`;
+        // 近景大颗粒的补光只有主星点的 18%，避免刺眼
+        glowStyles[i] = `rgba(${starRGB},${(a * 0.18).toFixed(3)})`;
+      }
+    };
     const readStarRGB = () => {
       const value = getComputedStyle(document.documentElement)
         .getPropertyValue("--star-rgb")
         .trim();
       if (value) starRGB = value;
+      buildStarStyles();
     };
     readStarRGB();
 
@@ -173,10 +192,9 @@ export default function Starfield({ className = "" }: { className?: string }) {
       /*
        * 星点颜色跟随主题：深色是白星点（--star-rgb: 255,255,255），
        * 浅色是墨渍（--star-rgb: 58,50,38）—— 暖白纸上画白点等于没画。
-       * 每帧读一次 getComputedStyle 太贵，只在主题切换时刷新（见下方 observer）。
+       * 颜色在 readStarRGB() 里已经预拼成 ALPHA_STEP 档的色表，
+       * 这里逐帧只做数组取值，不再拼 rgba() 字符串。
        */
-      const rgb = starRGB;
-
       for (const layer of layers) {
         const { def, items } = layer;
         const lx = -parallaxCurrent.x * PARALLAX * def.depth;
@@ -187,7 +205,8 @@ export default function Starfield({ className = "" }: { className?: string }) {
             ? p.alpha
             : p.alpha * (0.55 + 0.45 * Math.sin(elapsed * p.twinkle + p.phase));
 
-          ctx!.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
+          ctx!.fillStyle =
+            starStyles[Math.min(ALPHA_STEP, Math.max(0, Math.round(alpha * ALPHA_STEP)))];
           const x = p.x + lx + p.ox;
           const y = p.y + ly + p.oy;
 
@@ -201,7 +220,8 @@ export default function Starfield({ className = "" }: { className?: string }) {
             ctx!.fill();
 
             // 近景大颗粒补一层很淡的光晕，形成景深而不产生刺眼闪烁
-            ctx!.fillStyle = `rgba(${rgb},${(alpha * 0.18).toFixed(3)})`;
+            ctx!.fillStyle =
+              glowStyles[Math.min(ALPHA_STEP, Math.max(0, Math.round(alpha * ALPHA_STEP)))];
             ctx!.beginPath();
             ctx!.arc(x, y, p.r * 2.6, 0, TAU);
             ctx!.fill();
@@ -212,6 +232,13 @@ export default function Starfield({ className = "" }: { className?: string }) {
 
     function step(now: number) {
       rafId = requestAnimationFrame(step);
+
+      /*
+       * 限到 ~60fps。星点是缓慢的闪烁与漂移，在 120/144Hz 屏上多画的那些帧
+       * 肉眼看不出来，却让填充率凭空翻倍 —— 高刷屏上这是最容易被忽略的一笔
+       * 开销。低刷屏（60Hz）下这段判断永远为真，行为与之前完全一致。
+       */
+      if (now - lastFrame < 1000 / 60 - 1) return;
 
       const dt = Math.min((now - lastFrame) / 1000, 0.05);
       lastFrame = now;

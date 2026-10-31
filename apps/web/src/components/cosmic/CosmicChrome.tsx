@@ -25,14 +25,16 @@ export default function CosmicChrome() {
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-0 z-40">
-      {/* 背景层单独画，避免 backdrop-filter 作用到子元素 */}
+      {/* 背景层单独画，避免背景样式作用到子元素。
+          这里刻意不做 backdrop-filter：宇宙层背后是两层持续动画的画布，
+          模糊会变成逐帧重算的全宽开销（与站点导轨同一处理，见 globals.css
+          里 .site-rail 的注释）。原型也只有这条渐隐渐变。 */}
       <span
         aria-hidden
         className="absolute inset-0 -z-10 border-b border-border"
         style={{
           backgroundImage:
             "linear-gradient(to bottom, rgba(var(--scrim-rgb),0.92) 0%, rgba(var(--scrim-rgb),0.62) 62%, transparent 100%)",
-          backdropFilter: "blur(10px)",
         }}
       />
 

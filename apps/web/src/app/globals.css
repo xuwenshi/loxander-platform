@@ -768,10 +768,11 @@ html:has(.cosmic-scope) body {
 }
 
 /* 纸上的颗粒要更轻，否则像扫描件的脏点。
-   浅色用 multiply 让噪点变成墨渍，而不是浮在纸面的一层白霜。 */
+   浅色原来用 multiply 让噪点变成墨渍 —— 但那又是一层全屏混合，每帧都要
+   重新混合整个视口。改成纯透明度：噪点本来就是近黑随机像素，叠在暖白纸上
+   看起来一样是墨点，只是省掉了一层全屏 blend。 */
 html:not(.dark) .cosmic-grain {
   opacity: 0.028;
-  mix-blend-mode: multiply;
 }
 
 /* 指针三层：容器只有 0×0，三个子元素相对它偏移，位移由 JS 写 --px/--py。
@@ -852,8 +853,12 @@ html:not(.dark) .cosmic-grain {
    z-index 取 12：必须压在正文（z-10）之上，否则会被分区背景吃掉；
    同时低于导轨（40）与转场遮罩（39/100），永远不会盖住导航与转场。
    
-   混合模式按主题切换：暗色夜空用 screen 只提亮不压暗；浅色纸面用
-   multiply，不然 screen 会把墨点擦掉（纸本来就亮）。 */
+   ⚠️ 这里刻意**不用 mix-blend-mode**（原型用的是 screen / multiply）。
+   原因：全屏混合层会把整页强制变成一个「背景」，之后每画一帧都要把
+   整个视口重新混合一次；实测在软件光栅（禁用 GPU 加速）下这一条就从
+   39fps 掉到二十几帧，是整站最贵的一笔开销。
+   而这层的画面是「近黑底 + 半透明浅色小点」，source-over 与 screen 在
+   深色底上肉眼几乎无差；浅色纸面同理。用普通合成换回整帧预算，值得。 */
 .cosmic-wave {
   position: fixed;
   inset: 0;
@@ -861,12 +866,10 @@ html:not(.dark) .cosmic-grain {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  mix-blend-mode: screen;
   opacity: 0.95;
 }
 
 html:not(.dark) .cosmic-wave {
-  mix-blend-mode: multiply;
   opacity: 0.72;
 }
 
@@ -1036,7 +1039,12 @@ html:not(.dark) .cosmic-wave {
     rgba(var(--scrim-rgb), 0.62) 62%,
     transparent 100%
   );
-  backdrop-filter: blur(10px);
+  /* ⚠️ 原来这里有一条 backdrop-filter: blur(10px)。
+     它是**每帧重算**的：导轨是 fixed，背后又有一层持续动画（粒子浪潮），
+     所以滚动时每个合成帧都要把 1440×58 的区域重新模糊一遍。实测在软件光栅
+     下这一条就吃掉近三分之一帧预算。
+     原型 `_prototype/redesign.html` 的导轨本来就只靠上面这条渐隐渐变分隔，
+     没有做模糊 —— 去掉它既更快，也更贴近原型。 */
 }
 
 .site-rail__inner {

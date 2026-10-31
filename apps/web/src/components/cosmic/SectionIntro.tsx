@@ -38,7 +38,10 @@ export default function SectionIntro({
         返回星图
       </CosmicLink>
 
-      <p className="mt-4 inline-flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.22em] text-accent">
+      {/* `flex w-fit` 而不是 `inline-flex`：上一行是 inline-flex 的返回链接，
+          两个行内盒会并排挤在一行（截图上「← 返回星图 ● PROJECTS」粘在一起）。
+          改成块级 flex + 自适应宽度，既独占一行，又不会把悬停区拉满整行。 */}
+      <p className="mt-4 flex w-fit items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.22em] text-accent">
         <span
           aria-hidden
           className="h-1.5 w-1.5 rounded-full"

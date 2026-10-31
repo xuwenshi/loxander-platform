@@ -43,7 +43,8 @@ export default async function UniversePage() {
             返回星海入口
           </CosmicLink>
 
-          <p className="mt-6 inline-flex items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.24em] text-accent">
+          {/* 块级 flex：上面是 inline-flex 的返回链接，用 inline-flex 会挤成一行 */}
+          <p className="mt-6 flex w-fit items-center gap-2 font-mono text-[0.6875rem] uppercase tracking-[0.24em] text-accent">
             <span aria-hidden className="cosmic-pulse h-1.5 w-1.5 rounded-full bg-accent" />
             Star Map
           </p>

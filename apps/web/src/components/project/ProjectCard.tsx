@@ -43,7 +43,7 @@ export default function ProjectCard({ project }: { project: ProjectMeta }) {
         >
           {project.name.slice(0, 1).toUpperCase()}
         </span>
-        <span className="relative rounded-xs border border-border bg-elevated px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted backdrop-blur">
+        <span className="relative rounded-xs border border-border bg-elevated px-2.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-muted">
           {project.period ?? "项目"}
         </span>
       </div>

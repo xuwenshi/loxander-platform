@@ -15,8 +15,8 @@ import { useReducedMotion } from "@/lib/useReducedMotion";
  * 三条约束，与原型一致：
  * - `pointer-events: none` + `aria-hidden`：纯装饰，绝不参与交互与无障碍树；
  * - 减动效偏好下完全不挂载：这是一个持续动画，不是静态质感；
- * - 触屏上不做鼠标推斥（没有指针），并且隔帧绘制 —— 手机上持续 60fps 的
- *   背景动画是实打实的耗电，改成一秒 30 次肉眼无差。
+ * - 一秒最多画 30 次（所有设备）：浪潮的相位推进量是 `t * 0.00052`，一秒
+ *   只走 0.5 弧度，60 次和 30 次肉眼无差，但填充率、合成次数、耗电都减半。
  *
  * 配色从 CSS 变量读（`--ink-rgb` / `--warm-rgb`）：canvas 拿不到 CSS 变量，
  * 只能在挂载时和主题切换时各读一次 `getComputedStyle`。切主题时 ThemeToggle
@@ -28,8 +28,11 @@ import { useReducedMotion } from "@/lib/useReducedMotion";
 /** 列数 / 行数：与原型一致，横向密、纵向疏，读起来像一层薄纱 */
 const COLS = 66;
 const ROWS = 13;
-/** 设备像素比上限。超过 1.6 收益极小，但填充率翻倍 */
-const MAX_DPR = 1.6;
+/** 设备像素比上限。这是 1–3px 的点阵，1.25 与 1.6 在肉眼上无法分辨，
+    但填充率相差 64% —— 换来的帧预算比那点边缘锐度值钱得多 */
+const MAX_DPR = 1.25;
+/** 透明度量化档数：把 alpha 离散成 1/150 一档，用来查预拼好的 fillStyle */
+const ALPHA_STEP = 150;
 /** 指针推斥的作用半径（px）与最大位移 */
 const REPEL_RADIUS = 228;
 const REPEL_STRENGTH = 30;
@@ -67,6 +70,23 @@ export default function ParticleWave() {
     /** 调色板：["185,138,90", "233,229,219"] 这样的裸三元组，拼进 rgba() */
     let inkRGB = "233,229,219";
     let warmRGB = "233,201,162";
+    /**
+     * 预拼好的填充色表：每帧 858 个点，如果每个点各自拼一次 `rgba()`
+     * 字符串，就是 858 次字符串分配 + 858 次 `fillStyle` 赋值（后者会触发
+     * canvas 状态更新）。量化成 151 档查表后只剩一次数组取值，肉眼无差。
+     */
+    let inkStyles: string[] = [];
+    let warmStyles: string[] = [];
+    const buildStyles = () => {
+      inkStyles = new Array<string>(ALPHA_STEP + 1);
+      warmStyles = new Array<string>(ALPHA_STEP + 1);
+      for (let i = 0; i <= ALPHA_STEP; i += 1) {
+        const a = i / ALPHA_STEP;
+        inkStyles[i] = `rgba(${inkRGB},${a.toFixed(3)})`;
+        // 指针附近提亮 1.5 倍，与原型一致
+        warmStyles[i] = `rgba(${warmRGB},${Math.min(1, a * 1.5).toFixed(3)})`;
+      }
+    };
 
     const readPalette = () => {
       const style = getComputedStyle(document.documentElement);
@@ -74,6 +94,7 @@ export default function ParticleWave() {
       const warm = style.getPropertyValue("--warm-rgb").trim();
       if (ink) inkRGB = ink;
       if (warm) warmRGB = warm;
+      buildStyles();
     };
 
     const resize = () => {
@@ -120,10 +141,9 @@ export default function ParticleWave() {
           if (alpha < 0.012) continue;
 
           const size = 1.1 + (r / ROWS) * 0.85 + near * 1.6;
-          ctx.fillStyle =
-            near > 0.25
-              ? `rgba(${warmRGB},${(alpha * 1.5).toFixed(3)})`
-              : `rgba(${inkRGB},${alpha.toFixed(3)})`;
+          // 查表取色：alpha 上限约 0.34，乘以档数后一定落在表内
+          const bucket = Math.round(alpha * ALPHA_STEP);
+          ctx.fillStyle = near > 0.25 ? warmStyles[bucket] : inkStyles[bucket];
           ctx.fillRect(x, y, size, size);
         }
       }
@@ -131,14 +151,30 @@ export default function ParticleWave() {
 
     let frame = 0;
     let last = 0;
-    // 触屏隔帧绘制：一秒 30 次，肉眼与 60 次无差，耗电减半
-    const minDelta = coarse ? 33 : 0;
+    /**
+     * 一秒最多画 30 次（触屏 24 次）。浪潮的相位推进量是 `t * 0.00052`，
+     * 一秒只走 0.5 弧度：60 次与 30 次肉眼无差，但填充与合成次数直接减半。
+     */
+    const minDelta = coarse ? 1000 / 24 : 1000 / 30;
 
     const tick = (t: number) => {
       frame = requestAnimationFrame(tick);
       if (t - last < minDelta) return;
       last = t;
       draw(t);
+    };
+
+    /** 切到后台就停：后台标签页里继续画 858 个点纯属烧电 */
+    const onVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+        return;
+      }
+      if (frame === 0) {
+        last = 0;
+        frame = requestAnimationFrame(tick);
+      }
     };
 
     const onMove = (event: PointerEvent) => {
@@ -159,6 +195,7 @@ export default function ParticleWave() {
     document.addEventListener("pointerleave", onLeave);
     window.addEventListener("resize", resize);
     window.addEventListener(THEME_EVENT, readPalette);
+    document.addEventListener("visibilitychange", onVisibility);
 
     frame = requestAnimationFrame(tick);
 
@@ -168,6 +205,7 @@ export default function ParticleWave() {
       document.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("resize", resize);
       window.removeEventListener(THEME_EVENT, readPalette);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [reduced, excluded]);
 
