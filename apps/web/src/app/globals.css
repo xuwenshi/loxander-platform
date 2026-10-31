@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./home-hero.css";
 @plugin "@tailwindcss/typography";
 
 /* 暗色模式使用 .dark 类切换（而不是系统媒体查询），

@@ -1,0 +1,835 @@
+/* Homepage observatory hero. Global CSS is used instead of CSS Modules\n   because this project builds with Turbopack in production. */
+
+.home-observatory--hero {
+  position: relative;
+  height: 100svh;
+  min-height: 100svh;
+  padding: 6rem clamp(1.25rem, 5vw, 2.5rem) 2rem;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.home-observatory--hero::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: "";
+  opacity: 0.7;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgb(233 229 219 / 72%) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 29% 34%, rgb(233 229 219 / 40%) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 44% 12%, rgb(111 142 139 / 50%) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 73% 19%, rgb(233 229 219 / 68%) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 92% 28%, rgb(111 142 139 / 46%) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 39% 82%, rgb(233 229 219 / 35%) 0 0.9px, transparent 1.4px);
+}
+
+.home-observatory--starfield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.home-observatory--earth {
+  position: absolute;
+  right: -10vw;
+  bottom: -20%;
+  z-index: 0;
+  width: 132vw;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.82;
+  mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgb(0 0 0 / 3%) 6%,
+    #000 19%,
+    #000 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgb(0 0 0 / 3%) 6%,
+    #000 19%,
+    #000 100%
+  );
+}
+
+.home-observatory--earthMedia {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 58%;
+  filter: brightness(0.62) contrast(1.1) saturate(0.76);
+  mix-blend-mode: screen;
+}
+
+.home-observatory--earthVeil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(5 7 10 / 82%) 0%,
+      rgb(5 7 10 / 42%) 18%,
+      transparent 48%
+    ),
+    linear-gradient(0deg, var(--background) 0%, transparent 22%),
+    linear-gradient(180deg, rgb(5 7 10 / 35%) 0%, transparent 36%),
+    radial-gradient(circle at 56% 30%, rgb(185 138 90 / 8%), transparent 24%);
+}
+
+.home-observatory--transit {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.home-observatory--transit svg {
+  width: 100%;
+  height: 100%;
+}
+
+.home-observatory--transitGhost {
+  fill: none;
+  stroke: rgb(111 142 139 / 18%);
+  stroke-width: 0.75;
+  stroke-dasharray: 1 13;
+}
+
+.home-observatory--transitPath {
+  fill: none;
+  stroke: rgb(185 138 90 / 34%);
+  stroke-width: 1;
+  stroke-dasharray: 2 12;
+  stroke-linecap: round;
+  animation: transitFlow 9s linear infinite;
+}
+
+.home-observatory--transitPacket {
+  fill: #e1b47f;
+  filter: url("#home-hero-transit-glow");
+}
+
+.home-observatory--transitPacketRing {
+  fill: none;
+  stroke: rgb(225 180 127 / 50%);
+  stroke-width: 0.8;
+}
+
+.home-observatory--transitTail {
+  fill: #b98a5a;
+}
+
+.home-observatory--inner {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  width: 100%;
+  max-width: 64rem;
+  height: 100%;
+  margin-inline: auto;
+  flex-direction: column;
+}
+
+.home-observatory--copy {
+  position: relative;
+  z-index: 3;
+  width: min(100%, 43rem);
+  margin-top: clamp(2rem, 8vh, 5rem);
+}
+
+.home-observatory--eyebrow {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.home-observatory--title {
+  margin-top: 1.7rem;
+  color: var(--foreground);
+  font-family: var(--font-serif);
+  font-size: clamp(3.5rem, 5.55vw, 4.9rem);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+  text-wrap: balance;
+}
+
+.home-observatory--title span {
+  display: block;
+}
+
+.home-observatory--title span:first-child {
+  margin-bottom: 0.18em;
+  color: color-mix(in srgb, var(--foreground) 69%, transparent);
+  font-size: 0.48em;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.home-observatory--deck {
+  max-width: 35rem;
+  margin-top: 1.7rem;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+.home-observatory--actions {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  margin-top: 1.9rem;
+}
+
+.home-observatory--primary,
+.home-observatory--secondary {
+  min-height: 3rem;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.home-observatory--primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding-inline: 1.25rem;
+  color: var(--on-accent);
+  background: var(--accent);
+  transition:
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.home-observatory--primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+.home-observatory--secondary {
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--foreground) 13%, transparent);
+  transition:
+    color 180ms ease,
+    border-color 180ms ease;
+}
+
+.home-observatory--secondary:hover {
+  color: var(--foreground);
+  border-color: var(--accent);
+}
+
+.home-observatory--orbit {
+  position: absolute;
+  top: clamp(4.5rem, 9vh, 7rem);
+  right: 0;
+  z-index: 2;
+  display: grid;
+  width: clamp(17rem, 23vw, 21.5rem);
+  aspect-ratio: 1;
+  place-items: center;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.home-observatory--orbitAura {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgb(185 138 90 / 10%), transparent 45%),
+    radial-gradient(circle at 50% 50%, rgb(111 142 139 / 5%), transparent 70%);
+  box-shadow:
+    inset 0 0 50px rgb(111 142 139 / 4%),
+    0 0 80px rgb(185 138 90 / 4%);
+}
+
+.home-observatory--orbitProjection {
+  position: absolute;
+  bottom: -9%;
+  left: 50%;
+  width: 82%;
+  height: 26%;
+  border: 1px solid rgb(185 138 90 / 17%);
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(
+      ellipse at center,
+      transparent 0 7px,
+      rgb(185 138 90 / 7%) 8px,
+      transparent 9px 16px
+    ),
+    radial-gradient(ellipse, rgb(185 138 90 / 5%), transparent 70%);
+  transform: translateX(-50%);
+}
+
+.home-observatory--orbitFrame {
+  position: absolute;
+  inset: -4%;
+  z-index: 2;
+  border-radius: 50%;
+  opacity: 0.5;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgb(233 229 219 / 38%) 0deg 0.45deg,
+    transparent 0.45deg 10deg
+  );
+  mask-image: radial-gradient(circle, transparent 73%, #000 74% 75%, transparent 76%);
+  animation: orbitTurn 90s linear infinite;
+}
+
+.home-observatory--orbitTicks {
+  position: absolute;
+  inset: 12%;
+  z-index: 2;
+  border-radius: 50%;
+  opacity: 0.42;
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgb(111 142 139 / 60%) 0deg 0.6deg,
+    transparent 0.6deg 6deg
+  );
+  mask-image: radial-gradient(circle, transparent 88%, #000 89% 91%, transparent 92%);
+  animation: orbitTurn 64s linear infinite reverse;
+}
+
+.home-observatory--orbitRing,
+.home-observatory--orbitRingDash,
+.home-observatory--orbitRingWide {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.home-observatory--orbitRing {
+  inset: 5%;
+  z-index: 1;
+  border: 1px solid rgb(233 229 219 / 18%);
+}
+
+.home-observatory--orbitRingDash {
+  inset: 14%;
+  z-index: 1;
+  border: 1px dashed rgb(111 142 139 / 32%);
+  animation: orbitTurn 54s linear infinite reverse;
+}
+
+.home-observatory--orbitRingWide {
+  inset: -7%;
+  z-index: 1;
+  border: 1px solid rgb(185 138 90 / 14%);
+  mask-image: linear-gradient(120deg, transparent 5%, #000 30%, #000 72%, transparent 96%);
+}
+
+.home-observatory--orbitAxis {
+  position: absolute;
+  inset: 18%;
+  z-index: 2;
+  border-radius: 50%;
+  opacity: 0.46;
+  background:
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 0.5px),
+      rgb(111 142 139 / 34%) 50%,
+      transparent calc(50% + 0.5px)
+    ),
+    linear-gradient(
+      180deg,
+      transparent calc(50% - 0.5px),
+      rgb(233 229 219 / 18%) 50%,
+      transparent calc(50% + 0.5px)
+    );
+  mask-image: radial-gradient(circle, #000 0 73%, transparent 74%);
+}
+
+.home-observatory--orbitChart {
+  position: absolute;
+  inset: 5%;
+  z-index: 1;
+  width: 90%;
+  height: 90%;
+  overflow: visible;
+  animation: orbitTurn 76s linear infinite;
+}
+
+.home-observatory--orbitChart ellipse,
+.home-observatory--orbitChart path {
+  fill: none;
+  stroke: rgb(233 229 219 / 22%);
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.home-observatory--orbitChart path {
+  stroke: rgb(185 138 90 / 40%);
+  stroke-dasharray: 1 2.5;
+}
+
+.home-observatory--orbitLinks {
+  position: absolute;
+  inset: 5%;
+  z-index: 3;
+  width: 90%;
+  height: 90%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.home-observatory--tether {
+  stroke: rgb(111 142 139 / 44%);
+  stroke-width: 0.48;
+  stroke-dasharray: 1.2 4.8;
+  vector-effect: non-scaling-stroke;
+  animation: tetherDrift 7s linear infinite;
+  filter: drop-shadow(0 0 2px rgb(111 142 139 / 34%));
+}
+
+.home-observatory--orbitScan {
+  position: absolute;
+  inset: 1%;
+  z-index: 3;
+  border-radius: 50%;
+  opacity: 0.58;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 248deg,
+    rgb(185 138 90 / 3%) 274deg,
+    rgb(185 138 90 / 48%) 342deg,
+    transparent 354deg 360deg
+  );
+  mask-image: radial-gradient(circle, transparent 42%, #000 43% 76%, transparent 77%);
+  animation: orbitTurn 9s linear infinite;
+  mix-blend-mode: screen;
+}
+
+.home-observatory--orbitField {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.home-observatory--node {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--size, 8px);
+  height: var(--size, 8px);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 30% 24%,
+    #fffdf6 0 9%,
+    var(--node-color) 34%,
+    color-mix(in srgb, var(--node-color) 48%, #05070a) 100%
+  );
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--node-color) 10%, transparent),
+    0 0 16px color-mix(in srgb, var(--node-color) 65%, transparent);
+  translate: calc(-50% + var(--orbit-x, 0px)) calc(-50% + var(--orbit-y, 0px));
+  opacity: var(--orbit-opacity, 0.86);
+  scale: var(--orbit-scale, 1);
+  z-index: var(--orbit-z, 5);
+  will-change: translate, scale, opacity;
+}
+
+.home-observatory--node::before {
+  position: absolute;
+  inset: -4px;
+  content: "";
+  border: 1px solid color-mix(in srgb, var(--node-color) 42%, transparent);
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.home-observatory--node::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 1px;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--node-color) 65%, transparent),
+    transparent
+  );
+  transform: rotate(var(--trail-angle, 0deg)) translateX(4px);
+  transform-origin: left center;
+  opacity: 0.62;
+  filter: blur(0.2px);
+}
+
+.home-observatory--nodeProjects {
+  --node-color: #d9a66f;
+  --size: 10px;
+}
+
+.home-observatory--nodeWriting {
+  --node-color: #6f9ca1;
+  --size: 8px;
+}
+
+.home-observatory--nodeDiary {
+  --node-color: #bd8e7b;
+  --size: 8px;
+}
+
+.home-observatory--nodeGoals {
+  --node-color: #8bb9a9;
+  --size: 8px;
+}
+
+.home-observatory--nodeResume {
+  --node-color: #d8d1c3;
+  --size: 6px;
+}
+
+.home-observatory--core {
+  position: relative;
+  z-index: 7;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 32% 27%,
+    #fff9eb 0 10%,
+    #e1b47f 32%,
+    #7b5034 69%,
+    #21140e 100%
+  );
+  box-shadow:
+    0 0 0 10px rgb(185 138 90 / 6%),
+    0 0 42px 9px rgb(185 138 90 / 24%);
+}
+
+.home-observatory--core::before {
+  position: absolute;
+  inset: -18px;
+  content: "";
+  border: 1px solid rgb(185 138 90 / 20%);
+  border-radius: 50%;
+  animation: corePulse 4.8s ease-in-out infinite;
+}
+
+.home-observatory--core::after {
+  position: absolute;
+  inset: -25px;
+  content: "";
+  border: 1px dashed rgb(111 142 139 / 24%);
+  border-radius: 50%;
+  animation: orbitTurn 26s linear infinite reverse;
+}
+
+.home-observatory--coreHalo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  width: 34%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle,
+    rgb(225 180 127 / 18%),
+    rgb(185 138 90 / 6%) 24%,
+    transparent 62%
+  );
+  box-shadow: 0 0 70px rgb(185 138 90 / 9%);
+  transform: translate(-50%, -50%);
+  animation: coreHalo 6.4s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+.home-observatory--orbitEcho {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  width: 24%;
+  aspect-ratio: 1;
+  border: 1px solid rgb(185 138 90 / 36%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  animation: orbitEcho 7.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.home-observatory--comet {
+  position: absolute;
+  inset: 3%;
+  z-index: 5;
+  border-radius: 50%;
+  animation: orbitTurn 12s linear infinite;
+}
+
+.home-observatory--comet::before {
+  position: absolute;
+  top: 50%;
+  right: -2px;
+  width: 5px;
+  height: 5px;
+  content: "";
+  border-radius: 50%;
+  background: #e1b47f;
+  box-shadow:
+    0 0 9px rgb(225 180 127 / 84%),
+    0 0 26px rgb(185 138 90 / 35%);
+  transform: translateY(-50%);
+}
+
+.home-observatory--comet::after {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  width: 66px;
+  height: 1px;
+  content: "";
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(185 138 90 / 55%)
+  );
+  transform: translateY(-50%);
+}
+
+.home-observatory--orbitData,
+.home-observatory--orbitLive {
+  position: absolute;
+  z-index: 8;
+  color: color-mix(in srgb, var(--foreground) 58%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.43rem;
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.home-observatory--orbitData {
+  top: -1.25rem;
+  left: 0;
+}
+
+.home-observatory--orbitLive {
+  right: -0.5rem;
+  bottom: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.home-observatory--orbitLive i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #8bb9a9;
+  box-shadow: 0 0 9px rgb(139 185 169 / 72%);
+  animation: liveBlink 2.4s ease-in-out infinite;
+}
+
+.home-observatory--orbitLabel {
+  position: absolute;
+  bottom: -2.8rem;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: color-mix(in srgb, var(--foreground) 72%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.home-observatory--orbitLabel::before {
+  width: 3.5rem;
+  height: 1px;
+  margin-bottom: 0.35rem;
+  content: "";
+  background: var(--accent);
+}
+
+.home-observatory--status {
+  display: grid;
+  margin-top: auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgb(233 229 219 / 10%);
+}
+
+.home-observatory--status dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.home-observatory--status dd {
+  margin-top: 0.32rem;
+  color: var(--foreground);
+  font-size: 0.74rem;
+}
+
+@keyframes transitFlow {
+  to {
+    stroke-dashoffset: -84;
+  }
+}
+
+@keyframes orbitTurn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tetherDrift {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes corePulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.78);
+  }
+
+  50% {
+    opacity: 0.82;
+    transform: scale(1.14);
+  }
+}
+
+@keyframes coreHalo {
+  0%,
+  100% {
+    opacity: 0.44;
+    transform: translate(-50%, -50%) scale(0.86);
+  }
+
+  50% {
+    opacity: 0.86;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+@keyframes orbitEcho {
+  0%,
+  70% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.42);
+  }
+
+  76% {
+    opacity: 0.36;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.4);
+  }
+}
+
+@keyframes liveBlink {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .home-observatory--hero {
+    padding: 5.25rem 1.25rem 1.5rem;
+  }
+
+  .home-observatory--copy {
+    width: 100%;
+    margin-top: 1.5rem;
+  }
+
+  .home-observatory--title {
+    max-width: 20rem;
+    font-size: clamp(2.45rem, 11vw, 3.25rem);
+  }
+
+  .home-observatory--deck {
+    max-width: 21rem;
+    margin-top: 1.25rem;
+    font-size: 0.92rem;
+    line-height: 1.8;
+  }
+
+  .home-observatory--actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-top: 1.5rem;
+  }
+
+  .home-observatory--orbit {
+    top: auto;
+    right: 1rem;
+    bottom: 6.2rem;
+    width: 7.5rem;
+  }
+
+  .home-observatory--orbitLabel {
+    display: none;
+  }
+
+  .home-observatory--orbitFrame,
+  .home-observatory--orbitTicks,
+  .home-observatory--orbitScan,
+  .home-observatory--orbitData,
+  .home-observatory--orbitLive,
+  .home-observatory--orbitEcho,
+  .home-observatory--orbitProjection {
+    display: none;
+  }
+
+  .home-observatory--status {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem 1rem;
+  }
+
+  .home-observatory--status div:nth-child(3),
+  .home-observatory--status div:nth-child(4) {
+    display: none;
+  }
+
+  .home-observatory--earth {
+    right: -68vw;
+    bottom: -4%;
+    width: 186vw;
+    opacity: 0.62;
+  }
+
+  .home-observatory--transit {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-observatory--hero :is(*) {
+    animation: none !important;
+  }
+}

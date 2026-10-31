@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 
-import CentralPlanet from "@/components/cosmic/CentralPlanet";
 import CosmicLink from "@/components/cosmic/CosmicLink";
-import Starfield from "@/components/cosmic/Starfield";
+import HomeHero from "@/components/site/HomeHero";
 import { ArrowRightIcon } from "@/components/ui/Icons";
 import { cosmicQuickNav, heroAccent, cosmicSections } from "@/lib/cosmic";
 import { siteConfig } from "@/lib/site";
@@ -23,14 +22,6 @@ const quickNav = [
   })),
 ];
 
-/** 首屏左下角的状态栏：观测站的身份铭牌，不是装饰 */
-const STATUS: { k: string; v: string }[] = [
-  { k: "观测位置", v: siteConfig.location },
-  { k: "当前方向", v: "检索与 LLM 工程" },
-  { k: "在写", v: "技术文章 · 项目复盘" },
-  { k: "状态", v: "开放交流" },
-];
-
 /**
  * 星海入口（/）。
  *
@@ -47,71 +38,7 @@ const STATUS: { k: string; v: string }[] = [
 export default function CosmicHomePage() {
   return (
     <>
-      <section className="cosmic-enter relative flex min-h-svh flex-col justify-center overflow-hidden px-5 py-24 sm:px-10">
-        <Starfield />
-
-        {/* 左侧竖排编号：给首屏一条"边缘"，打破居中纪念碑感 */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute left-5 top-1/2 hidden -translate-y-1/2 font-mono text-[0.625rem] tracking-[0.42em] text-cosmic-muted [writing-mode:vertical-rl] lg:block"
-        >
-          OBSERVATORY · SINCE 2024 · CN
-        </span>
-
-        <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col">
-          <p className="font-mono text-[0.6875rem] tracking-[0.32em] text-cosmic-muted">
-            {siteConfig.author} · {siteConfig.role}
-          </p>
-
-          {/* 首屏唯一的一级标题：本站是「作者的个人宇宙」，作者名与身份就是页面主题。
-              之前这里是一个 <p>，导致 / 整页没有 h1，标题大纲从二级开始。 */}
-          <h1 className="mt-5 max-w-3xl font-serif text-[clamp(2.25rem,5.4vw,4.5rem)] font-medium leading-[1.16] tracking-tight text-cosmic-text">
-            在深空里，
-            <br />
-            构建<em className="not-italic text-accent">可解释</em>的系统。
-          </h1>
-
-          <p className="mt-6 max-w-xl text-base leading-relaxed text-cosmic-muted">
-            {siteConfig.tagline}
-            这里是我的观测记录：机器学习建模、农业数据挖掘、RAG
-            与 LLM 工程实践中的问题、原理、实验与踩坑。
-          </p>
-
-          <div className="mt-10 flex flex-wrap items-center gap-3">
-            <CosmicLink
-              href="/universe"
-              variant="warp"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
-            >
-              打开星图
-              <ArrowRightIcon width={15} height={15} />
-            </CosmicLink>
-            <CosmicLink
-              href="/blog"
-              variant="soft"
-              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-accent/60"
-            >
-              直接读文章
-            </CosmicLink>
-          </div>
-
-          <div className="mt-14">
-            <CentralPlanet />
-          </div>
-
-          {/* 四格状态栏：首屏的信息密度来自这里 */}
-          <dl className="mt-14 grid grid-cols-2 gap-x-6 gap-y-5 border-t border-cosmic-line pt-6 sm:grid-cols-4">
-            {STATUS.map((item) => (
-              <div key={item.k}>
-                <dt className="font-mono text-[0.5625rem] tracking-[0.2em] text-cosmic-muted">
-                  {item.k}
-                </dt>
-                <dd className="mt-1.5 text-sm text-cosmic-text">{item.v}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
+      <HomeHero />
 
       <section className="relative z-10 border-t border-cosmic-line">
         <div className="mx-auto w-full max-w-5xl px-5 py-14 sm:px-10">
